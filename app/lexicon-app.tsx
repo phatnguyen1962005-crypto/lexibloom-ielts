@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { lexicon, lexiconStats, topics, type WordEntry } from "./lexicon-data";
 
 type View = "explore" | "quiz-choice" | "quiz-typing" | "mistakes";
@@ -35,12 +35,29 @@ const focusLabels: Record<QuizFocus, string> = {
   pronunciation: "Phát âm",
 };
 
-const navItems: { id: View; label: string; short: string }[] = [
-  { id: "explore", label: "Kho từ vựng", short: "Kho từ" },
-  { id: "quiz-choice", label: "Trắc nghiệm", short: "Chọn đáp án" },
-  { id: "quiz-typing", label: "Tự gõ đáp án", short: "Tự gõ" },
-  { id: "mistakes", label: "Sổ lỗi", short: "Sổ lỗi" },
+const navItems: { id: View; label: string; short: string; icon: string }[] = [
+  { id: "explore", label: "Kho từ vựng", short: "Kho từ", icon: "⌂" },
+  { id: "quiz-choice", label: "Trắc nghiệm", short: "Trắc nghiệm", icon: "◆" },
+  { id: "quiz-typing", label: "Tự gõ đáp án", short: "Tự gõ", icon: "✎" },
+  { id: "mistakes", label: "Sổ lỗi", short: "Sổ lỗi", icon: "↻" },
 ];
+
+const topicIcons: Record<string, string> = {
+  "Academic Core": "Aa",
+  Education: "✦",
+  Environment: "⌁",
+  Technology: "⌘",
+  Health: "+",
+  Society: "◎",
+  "Economy & Work": "↗",
+  "Government & Crime": "§",
+  "Cities & Transport": "⌂",
+  "Media & Culture": "◉",
+  "Data & Trends": "⌁",
+  "High-value Language": "★",
+};
+
+type SoundKind = "tap" | "correct" | "wrong" | "collect" | "complete";
 
 const shuffle = <T,>(items: T[]) => {
   const copy = [...items];
@@ -205,12 +222,72 @@ export default function LexiconApp() {
   const [correct, setCorrect] = useState(false);
   const [score, setScore] = useState(0);
   const [questionNumber, setQuestionNumber] = useState(1);
+  const [sessionComplete, setSessionComplete] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [xp, setXp] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [lastStudyDay, setLastStudyDay] = useState("");
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  const playSound = (kind: SoundKind, force = false) => {
+    if ((!soundEnabled && !force) || typeof window === "undefined") return;
+    const AudioContextConstructor =
+      window.AudioContext ??
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) return;
+
+    const context = audioContextRef.current ?? new AudioContextConstructor();
+    audioContextRef.current = context;
+    if (context.state === "suspended") void context.resume();
+
+    const sequences: Record<SoundKind, Array<[number, number, number]>> = {
+      tap: [[440, 0, 0.055]],
+      correct: [[523, 0, 0.09], [659, 0.08, 0.1], [784, 0.17, 0.13]],
+      wrong: [[240, 0, 0.12], [180, 0.1, 0.18]],
+      collect: [[659, 0, 0.08], [988, 0.07, 0.14]],
+      complete: [[523, 0, 0.12], [659, 0.11, 0.12], [784, 0.22, 0.12], [1047, 0.34, 0.2]],
+    };
+
+    const startAt = context.currentTime + 0.015;
+    sequences[kind].forEach(([frequency, offset, duration], index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = kind === "wrong" ? "triangle" : index % 2 === 0 ? "sine" : "triangle";
+      oscillator.frequency.setValueAtTime(frequency, startAt + offset);
+      gain.gain.setValueAtTime(0.0001, startAt + offset);
+      gain.gain.exponentialRampToValueAtTime(kind === "tap" ? 0.04 : 0.085, startAt + offset + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + offset + duration);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(startAt + offset);
+      oscillator.stop(startAt + offset + duration + 0.02);
+    });
+  };
+
+  const todayKey = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  };
+
+  const markStudyDay = () => {
+    const today = todayKey();
+    if (lastStudyDay === today) return;
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = `${yesterdayDate.getFullYear()}-${String(yesterdayDate.getMonth() + 1).padStart(2, "0")}-${String(yesterdayDate.getDate()).padStart(2, "0")}`;
+    setStreak((current) => (lastStudyDay === yesterday ? current + 1 : 1));
+    setLastStudyDay(today);
+  };
 
   useEffect(() => {
     try {
       setFavorites(JSON.parse(localStorage.getItem("ielts-lexicon-favorites") ?? "[]"));
       setMastered(JSON.parse(localStorage.getItem("ielts-lexicon-mastered") ?? "[]"));
       setMistakes(JSON.parse(localStorage.getItem("ielts-lexicon-mistakes") ?? "[]"));
+      setSoundEnabled(JSON.parse(localStorage.getItem("ielts-lexicon-sound") ?? "true"));
+      setXp(Number(localStorage.getItem("ielts-lexicon-xp") ?? 0));
+      setStreak(Number(localStorage.getItem("ielts-lexicon-streak") ?? 0));
+      setLastStudyDay(localStorage.getItem("ielts-lexicon-last-study") ?? "");
     } catch {
       // A malformed local value should never prevent the dictionary from loading.
     }
@@ -222,7 +299,11 @@ export default function LexiconApp() {
     localStorage.setItem("ielts-lexicon-favorites", JSON.stringify(favorites));
     localStorage.setItem("ielts-lexicon-mastered", JSON.stringify(mastered));
     localStorage.setItem("ielts-lexicon-mistakes", JSON.stringify(mistakes));
-  }, [favorites, mastered, mistakes, hydrated]);
+    localStorage.setItem("ielts-lexicon-sound", JSON.stringify(soundEnabled));
+    localStorage.setItem("ielts-lexicon-xp", String(xp));
+    localStorage.setItem("ielts-lexicon-streak", String(streak));
+    localStorage.setItem("ielts-lexicon-last-study", lastStudyDay);
+  }, [favorites, mastered, mistakes, soundEnabled, xp, streak, lastStudyDay, hydrated]);
 
   useEffect(() => {
     if (view === "quiz-choice" || view === "quiz-typing") {
@@ -232,6 +313,7 @@ export default function LexiconApp() {
       setCorrect(false);
       setScore(0);
       setQuestionNumber(1);
+      setSessionComplete(false);
     }
   }, [view, focus]);
 
@@ -252,8 +334,22 @@ export default function LexiconApp() {
 
   const selected = lexicon.find((entry) => entry.id === selectedId) ?? filtered[0] ?? lexicon[0];
   const masteredPercent = Math.round((mastered.length / lexicon.length) * 100);
+  const featured = lexicon.find((entry) => entry.term === "mitigate") ?? lexicon[0];
+  const reviewCount = Math.min(mistakes.length, 12);
+
+  const navigateTo = (nextView: View) => {
+    playSound("tap");
+    setView(nextView);
+  };
+
+  const toggleSound = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    if (next) playSound("tap", true);
+  };
 
   const toggleList = (id: string, current: string[], setter: (items: string[]) => void) => {
+    playSound("collect");
     setter(current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   };
 
@@ -263,7 +359,7 @@ export default function LexiconApp() {
     setTopic("Tất cả");
     setKind("Tất cả");
     setLevel("Tất cả");
-    setView("explore");
+    navigateTo("explore");
   };
 
   const submitAnswer = (answer: string) => {
@@ -273,10 +369,15 @@ export default function LexiconApp() {
     setSubmitted(answer);
     setAnswered(true);
     setCorrect(isCorrect);
+    markStudyDay();
     if (isCorrect) {
+      playSound("correct");
       setScore((value) => value + 1);
+      setXp((value) => value + 10);
       return;
     }
+
+    playSound("wrong");
 
     setMistakes((current) => [
       {
@@ -298,38 +399,58 @@ export default function LexiconApp() {
   };
 
   const nextQuestion = () => {
-    const nextNumber = questionNumber >= 10 ? 1 : questionNumber + 1;
-    setQuestionNumber(nextNumber);
-    if (questionNumber >= 10) setScore(0);
+    if (questionNumber >= 10) {
+      setSessionComplete(true);
+      playSound("complete");
+      return;
+    }
+    playSound("tap");
+    setQuestionNumber((value) => value + 1);
     setQuestion(makeQuestion(focus, view === "quiz-choice"));
     setSubmitted("");
     setAnswered(false);
     setCorrect(false);
   };
 
+  const restartSession = () => {
+    playSound("tap");
+    setQuestion(makeQuestion(focus, view === "quiz-choice"));
+    setSubmitted("");
+    setAnswered(false);
+    setCorrect(false);
+    setScore(0);
+    setQuestionNumber(1);
+    setSessionComplete(false);
+  };
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <button className="brand" type="button" onClick={() => setView("explore")}>
-          <span className="brand-mark">Lx</span>
-          <span><strong>IELTS Lexicon</strong><small>Build your word power</small></span>
+        <button className="brand" type="button" onClick={() => navigateTo("explore")}>
+          <span className="brand-mark"><b>L</b><i>+</i></span>
+          <span><strong>LexiBloom</strong><small>IELTS Vocabulary</small></span>
         </button>
 
         <nav className="primary-nav" aria-label="Điều hướng chính">
           <p className="nav-caption">Học từ vựng</p>
-          {navItems.map((item, index) => (
+          {navItems.map((item) => (
             <button
               type="button"
               key={item.id}
               className={view === item.id ? "active" : ""}
-              onClick={() => setView(item.id)}
+              onClick={() => navigateTo(item.id)}
             >
-              <span className="nav-index">0{index + 1}</span>
+              <span className="nav-icon" aria-hidden="true">{item.icon}</span>
               <span>{item.label}</span>
               {item.id === "mistakes" && mistakes.length > 0 && <b>{mistakes.length}</b>}
             </button>
           ))}
         </nav>
+
+        <div className="daily-goal-card">
+          <div className="goal-ring" style={{ "--goal": `${Math.min(questionNumber * 10, 100)}%` } as React.CSSProperties}><span>{Math.min(questionNumber, 10)}</span><small>/10</small></div>
+          <div><strong>Mục tiêu hôm nay</strong><p>Làm 10 câu để giữ streak.</p><button type="button" onClick={() => navigateTo("quiz-choice")}>Học ngay →</button></div>
+        </div>
 
         <div className="side-progress">
           <div className="side-progress-head"><span>Đã nắm vững</span><strong>{masteredPercent}%</strong></div>
@@ -342,25 +463,61 @@ export default function LexiconApp() {
 
       <main className="main-panel">
         <header className="topbar">
-          <div className="mobile-brand"><span className="brand-mark">Lx</span><strong>IELTS Lexicon</strong></div>
+          <div className="mobile-brand"><span className="brand-mark"><b>L</b><i>+</i></span><strong>LexiBloom</strong></div>
           <div className="topbar-actions">
-            <span className="data-pill"><i /> {lexiconStats.entries} mục từ sẵn có</span>
-            <button type="button" className="avatar" aria-label="Hồ sơ người học">YL</button>
+            <span className="metric-pill streak-pill"><i>🔥</i><strong>{streak}</strong><small>streak</small></span>
+            <span className="metric-pill xp-pill"><i>⚡</i><strong>{xp}</strong><small>XP</small></span>
+            <button type="button" className={`sound-toggle ${soundEnabled ? "on" : ""}`} onClick={toggleSound} aria-pressed={soundEnabled} aria-label={soundEnabled ? "Tắt âm thanh" : "Bật âm thanh"}>
+              <span aria-hidden="true">{soundEnabled ? "♪" : "×"}</span>
+            </button>
+            <button type="button" className="avatar" aria-label="Hồ sơ người học"><span>YL</span><i /></button>
           </div>
         </header>
 
         {view === "explore" && (
           <div className="content-wrap explore-view">
-            <section className="hero-panel">
-              <div>
-                <p className="eyebrow">IELTS VOCABULARY SYSTEM</p>
-                <h1>Một từ, cả <em>mạng lưới</em> kiến thức.</h1>
-                <p>Tra cứu từ học thuật cùng phát âm, collocation, đồng nghĩa, word family và cách dùng — trong một hồ sơ duy nhất.</p>
+            <section className="learning-hero">
+              <div className="hero-copy">
+                <span className="hero-badge"><i /> Kho IELTS đã sẵn sàng</span>
+                <h1>Biến từ mới thành<br/><em>phản xạ thật.</em></h1>
+                <p>Học nghĩa, nghe phát âm, nối collocation và tự kiểm tra — mỗi ngày một chút, nhớ lâu hơn hẳn.</p>
+                <div className="hero-actions">
+                  <button type="button" className="primary-cta" onClick={() => navigateTo("quiz-choice")}><span>▶</span> Bắt đầu 10 câu</button>
+                  <button type="button" className="secondary-cta" onClick={() => navigateTo("quiz-typing")}>Thử chế độ khó <span>→</span></button>
+                </div>
               </div>
-              <div className="hero-stats" aria-label="Thống kê kho từ">
-                <article><strong>{lexiconStats.entries}</strong><span>Từ & cụm</span></article>
-                <article><strong>{lexiconStats.collocations}</strong><span>Collocations</span></article>
-                <article><strong>{lexiconStats.topics}</strong><span>Chủ đề</span></article>
+              <div className="word-of-day">
+                <div className="word-card-orbit orbit-one" />
+                <div className="word-card-orbit orbit-two" />
+                <div className="word-card-inner">
+                  <div className="word-card-top"><span>WORD OF THE DAY</span><SpeakerButton term={featured.term} compact /></div>
+                  <p>{featured.partOfSpeech} · {featured.level}</p>
+                  <h2>{featured.term}</h2>
+                  <code>{featured.ipa}</code>
+                  <strong>{featured.meaningVi}</strong>
+                  <small>{featured.collocations[0]}</small>
+                  <button type="button" onClick={() => goToEntry(featured.id)}>Mở hồ sơ từ <span>→</span></button>
+                </div>
+                <span className="floating-chip chip-one">{featured.synonyms[0]}</span>
+                <span className="floating-chip chip-two">{featured.family[0]}</span>
+              </div>
+            </section>
+
+            <section className="learning-stats" aria-label="Tiến độ học">
+              <article><span className="stat-icon purple">Aa</span><div><strong>{lexiconStats.entries}</strong><small>Từ & cụm IELTS</small></div></article>
+              <article><span className="stat-icon green">⌁</span><div><strong>{lexiconStats.collocations}</strong><small>Collocation có sẵn</small></div></article>
+              <article><span className="stat-icon orange">✓</span><div><strong>{mastered.length}</strong><small>Đã nắm vững</small></div></article>
+              <article><span className="stat-icon coral">↻</span><div><strong>{reviewCount}</strong><small>Cần ôn lại</small></div></article>
+            </section>
+
+            <section className="topic-browser">
+              <div className="section-heading"><div><span>Học theo chủ đề</span><h2>Chọn một vùng từ vựng</h2></div><small>{lexiconStats.topics} bộ chủ đề</small></div>
+              <div className="topic-chips">
+                {topics.slice(1).map((item) => (
+                  <button type="button" key={item} className={topic === item ? "active" : ""} onClick={() => { playSound("tap"); setTopic(topic === item ? "Tất cả" : item); }}>
+                    <span>{topicIcons[item] ?? "•"}</span><b>{item}</b><small>{lexicon.filter((entry) => entry.topic === item).length}</small>
+                  </button>
+                ))}
               </div>
             </section>
 
@@ -387,7 +544,7 @@ export default function LexiconApp() {
                       type="button"
                       className={`word-row ${selected.id === entry.id ? "selected" : ""}`}
                       key={entry.id}
-                      onClick={() => setSelectedId(entry.id)}
+                      onClick={() => { playSound("tap"); setSelectedId(entry.id); }}
                     >
                       <span className="word-main"><strong>{entry.term}</strong><small>{entry.ipa} · {entry.partOfSpeech}</small></span>
                       <span className="word-topic">{entry.topic}</span>
@@ -399,6 +556,7 @@ export default function LexiconApp() {
               </div>
 
               <article className="word-detail">
+                <div className="detail-glow" />
                 <div className="detail-topline">
                   <div className="chip-row"><span>{selected.topic}</span><span>{selected.kind === "word" ? "Từ đơn" : selected.kind === "phrase" ? "Cụm từ" : "Collocation"}</span><span>{selected.level}</span></div>
                   <div className="detail-actions">
@@ -411,6 +569,13 @@ export default function LexiconApp() {
                   <p>{selected.partOfSpeech}</p>
                   <h2>{selected.term}</h2>
                   <div className="pronunciation-line"><code>{selected.ipa}</code><span>•</span><span>{selected.stress}</span><SpeakerButton term={selected.term} /></div>
+                </div>
+
+                <div className="mini-learning-path" aria-label="Các lớp kiến thức của từ">
+                  <span className="done"><i>✓</i>Nghĩa</span><b />
+                  <span><i>2</i>Phát âm</span><b />
+                  <span><i>3</i>Collocation</span><b />
+                  <span><i>4</i>Quan hệ từ</span>
                 </div>
 
                 <div className="meaning-block">
@@ -448,15 +613,29 @@ export default function LexiconApp() {
         {(view === "quiz-choice" || view === "quiz-typing") && (
           <div className="content-wrap quiz-view">
             <section className="quiz-heading">
-              <div><p className="eyebrow">ACTIVE RECALL</p><h1>{view === "quiz-choice" ? "Chọn đáp án đúng" : "Tự gõ từ bạn nhớ"}</h1><p>{view === "quiz-choice" ? "Nhận diện nhanh qua bốn lựa chọn." : "Không có gợi ý đáp án — buộc não tự truy xuất."}</p></div>
-              <div className="session-score"><span>Điểm phiên này</span><strong>{score}<small>/ {questionNumber}</small></strong></div>
+              <div><span className="mode-orb">{view === "quiz-choice" ? "◆" : "✎"}</span><p className="eyebrow">ACTIVE RECALL</p><h1>{view === "quiz-choice" ? "Trắc nghiệm tăng tốc" : "Tự gõ để nhớ sâu"}</h1><p>{view === "quiz-choice" ? "Chọn nhanh, nhận phản hồi ngay và tích XP." : "Không nhìn đáp án — để não tự kéo từ ra khỏi trí nhớ."}</p></div>
+              <div className="session-score"><span>Phiên học</span><strong>{score}<small>/ {sessionComplete ? 10 : questionNumber}</small></strong><em>+{score * 10} XP</em></div>
             </section>
 
             <div className="focus-tabs" role="tablist" aria-label="Chọn kiến thức kiểm tra">
-              {(Object.keys(focusLabels) as QuizFocus[]).map((item) => <button type="button" key={item} className={focus === item ? "active" : ""} onClick={() => setFocus(item)}>{focusLabels[item]}</button>)}
+              {(Object.keys(focusLabels) as QuizFocus[]).map((item) => <button type="button" key={item} className={focus === item ? "active" : ""} onClick={() => { playSound("tap"); setFocus(item); }}>{focusLabels[item]}</button>)}
             </div>
 
-            {question && (
+            {sessionComplete ? (
+              <section className="result-card">
+                <div className="confetti" aria-hidden="true">{Array.from({ length: 14 }, (_, index) => <i key={index} />)}</div>
+                <div className="result-crown">✦</div>
+                <p>HOÀN THÀNH PHIÊN HỌC</p>
+                <h2>{score >= 8 ? "Quá ổn! Não đang vào guồng." : score >= 5 ? "Tiến bộ rồi, ôn thêm chút nhé." : "Sai để biết chỗ cần nhớ."}</h2>
+                <div className="result-score"><strong>{score}<small>/10</small></strong><span>{score * 10}% chính xác</span></div>
+                <div className="result-metrics">
+                  <article><span>⚡</span><strong>+{score * 10} XP</strong><small>Đã nhận</small></article>
+                  <article><span>🔥</span><strong>{streak} ngày</strong><small>Streak hiện tại</small></article>
+                  <article><span>↻</span><strong>{10 - score} từ</strong><small>Cần ôn lại</small></article>
+                </div>
+                <div className="result-actions"><button type="button" onClick={restartSession}>Làm thêm 10 câu</button><button type="button" onClick={() => navigateTo("mistakes")}>Xem sổ lỗi</button></div>
+              </section>
+            ) : question && (
               <section className={`quiz-card ${answered ? (correct ? "answer-correct" : "answer-wrong") : ""}`}>
                 <div className="quiz-progress"><span>Câu {questionNumber}/10</span><div><i style={{ width: `${questionNumber * 10}%` }} /></div><b>{question.label}</b></div>
                 <div className="question-copy">
@@ -494,8 +673,8 @@ export default function LexiconApp() {
                 {answered && (
                   <div className="answer-feedback">
                     <div className="feedback-icon">{correct ? "✓" : "!"}</div>
-                    <div><strong>{correct ? "Chính xác." : "Chưa đúng."}</strong><p>Đáp án: <b>{question.answer}</b></p><small>{question.entry.example}</small></div>
-                    <button type="button" onClick={nextQuestion}>{questionNumber === 10 ? "Phiên mới" : "Câu tiếp theo"} →</button>
+                    <div><strong>{correct ? "+10 XP · Chính xác!" : "Chưa đúng — đã lưu vào sổ lỗi."}</strong><p>Đáp án: <b>{question.answer}</b></p><small>{question.entry.example}</small></div>
+                    <button type="button" onClick={nextQuestion}>{questionNumber === 10 ? "Xem kết quả" : "Câu tiếp theo"} →</button>
                   </div>
                 )}
               </section>
@@ -509,7 +688,7 @@ export default function LexiconApp() {
           <div className="content-wrap mistakes-view">
             <section className="mistakes-heading">
               <div><p className="eyebrow">PERSONAL ERROR BANK</p><h1>Sổ lỗi của bạn</h1><p>Mỗi câu trả lời sai được giữ lại để bạn biết chính xác mình yếu ở nghĩa, cụm, đồng nghĩa hay phát âm.</p></div>
-              {mistakes.length > 0 && <button type="button" onClick={() => setMistakes([])}>Xóa toàn bộ</button>}
+              {mistakes.length > 0 && <button type="button" onClick={() => { playSound("tap"); setMistakes([]); }}>Xóa toàn bộ</button>}
             </section>
 
             <div className="mistake-summary">
@@ -532,7 +711,7 @@ export default function LexiconApp() {
                 );
               })}
               {mistakes.length === 0 && (
-                <div className="mistake-empty"><span>✓</span><h2>Sổ lỗi đang trống</h2><p>Làm bài trắc nghiệm hoặc tự gõ. Những câu sai sẽ tự xuất hiện ở đây.</p><button type="button" onClick={() => setView("quiz-choice")}>Bắt đầu trắc nghiệm</button></div>
+                <div className="mistake-empty"><span>✓</span><h2>Sổ lỗi đang trống</h2><p>Làm bài trắc nghiệm hoặc tự gõ. Những câu sai sẽ tự xuất hiện ở đây.</p><button type="button" onClick={() => navigateTo("quiz-choice")}>Bắt đầu trắc nghiệm</button></div>
               )}
             </section>
           </div>
@@ -540,7 +719,7 @@ export default function LexiconApp() {
       </main>
 
       <nav className="mobile-nav" aria-label="Điều hướng di động">
-        {navItems.map((item) => <button type="button" key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}><span>{item.short}</span>{item.id === "mistakes" && mistakes.length > 0 && <b>{mistakes.length}</b>}</button>)}
+        {navItems.map((item) => <button type="button" key={item.id} className={view === item.id ? "active" : ""} onClick={() => navigateTo(item.id)}><i aria-hidden="true">{item.icon}</i><span>{item.short}</span>{item.id === "mistakes" && mistakes.length > 0 && <b>{mistakes.length}</b>}</button>)}
       </nav>
     </div>
   );
