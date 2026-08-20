@@ -4,7 +4,7 @@ LexiBloom is a Vietnamese-first vocabulary learning app for IELTS. It treats eve
 
 ## Included
 
-- 118 curated academic words, phrases, and collocations across 11 IELTS topic groups
+- 119 curated academic words, phrases, and collocations across 12 IELTS topic groups
 - Vietnamese meaning, English definition, IPA, stress guide, word class, CEFR level, and example
 - Collocations, synonyms, antonyms, and word families
 - Search and filters by topic, entry type, and level
@@ -31,6 +31,16 @@ npm run build
 ```
 
 The vocabulary dataset is stored in `app/lexicon-data.ts`. Add a new pipe-delimited row using the same 14-field format to extend the library.
+
+## GitHub Pages
+
+The repository deploys automatically through GitHub Actions whenever `main` is updated. The workflow creates a static export with the repository base path and publishes the generated `out` directory to GitHub Pages.
+
+To verify the Pages build locally:
+
+```bash
+npm run build:pages
+```
 
 ## Notes
 

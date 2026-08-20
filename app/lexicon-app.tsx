@@ -91,7 +91,7 @@ const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\
 const collocationGaps = (entry: WordEntry): CollocationGap[] => {
   const termPattern = new RegExp(escapeRegExp(entry.term), "i");
 
-  return entry.collocations.flatMap((phrase) => {
+  return entry.collocations.flatMap((phrase): CollocationGap[] => {
     const match = phrase.match(termPattern);
     if (!match || match.index === undefined) return [];
 
@@ -103,7 +103,7 @@ const collocationGaps = (entry: WordEntry): CollocationGap[] => {
         answer: before,
         entry,
         phrase,
-        position: "before" as const,
+        position: "before",
         prompt: `_____ ${entry.term}${after ? ` ${after}` : ""}`,
       }];
     }
@@ -113,7 +113,7 @@ const collocationGaps = (entry: WordEntry): CollocationGap[] => {
         answer: after,
         entry,
         phrase,
-        position: "after" as const,
+        position: "after",
         prompt: `${entry.term} _____`,
       }];
     }

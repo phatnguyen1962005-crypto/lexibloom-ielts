@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+  ?? "https://ielts-lexicon.phat19061970.chatgpt.site";
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://ielts-lexicon.phat19061970.chatgpt.site"),
+  metadataBase: new URL(siteUrl),
   title: "LexiBloom — IELTS Vocabulary",
   description:
     "Học từ vựng IELTS bằng phát âm, collocation, đồng nghĩa, active recall, trắc nghiệm, tự gõ đáp án, XP và streak.",
@@ -11,18 +15,18 @@ export const metadata: Metadata = {
     description: "Learn. Recall. Grow. Học từ, cụm và collocation IELTS như một ứng dụng thực thụ.",
     type: "website",
     locale: "vi_VN",
-    url: "https://ielts-lexicon.phat19061970.chatgpt.site",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "LexiBloom — IELTS Vocabulary" }],
+    url: siteUrl,
+    images: [{ url: `${basePath}/og.png`, width: 1200, height: 630, alt: "LexiBloom — IELTS Vocabulary" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "LexiBloom — IELTS Vocabulary",
     description: "Learn. Recall. Grow. Học từ, cụm và collocation IELTS như một ứng dụng thực thụ.",
-    images: ["/og.png"],
+    images: [`${basePath}/og.png`],
   },
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: `${basePath}/favicon.svg`,
+    shortcut: `${basePath}/favicon.svg`,
   },
 };
 
