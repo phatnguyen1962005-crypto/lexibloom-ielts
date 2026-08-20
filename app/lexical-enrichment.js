@@ -88,10 +88,55 @@ export const enrichLearningProfile = (entry) => ({
 export const inferWordFormType = (term, fallback = "word form") => {
   const value = term.toLowerCase();
   if (/ly$/.test(value)) return "adverb";
-  if (/(tion|sion|ment|ness|ity|ism|ance|ence|ship|er|or)$/.test(value)) return "noun";
-  if (/(ise|ize|ify|ate)$/.test(value)) return "verb";
-  if (/(ive|al|ous|ful|less|able|ible|ic|ary|ory)$/.test(value)) return "adjective";
+  if (/(tion|sion|ment|ness|ity|ism|ance|ence|ship|hood|acy|ure|er|or)$/.test(value)) return "noun";
+  if (/(ise|ize|ify|ate|en)$/.test(value)) return "verb";
+  if (/(ive|al|ous|ful|less|able|ible|ic|ary|ory|ent|ant)$/.test(value)) return "adjective";
   return fallback;
+};
+
+const wordClassVi = (partOfSpeech) => {
+  const value = partOfSpeech.toLowerCase();
+  if (value.includes("noun")) return "danh từ";
+  if (value.includes("verb")) return "động từ";
+  if (value.includes("adjective")) return "tính từ";
+  if (value.includes("adverb")) return "trạng từ";
+  return "dạng từ";
+};
+
+const usageFrameFor = (term, partOfSpeech) => {
+  const value = partOfSpeech.toLowerCase();
+  if (value.includes("adverb")) return `[verb/adjective] + ${term}`;
+  if (value.includes("adjective")) return `${term} + [noun] / become ${term}`;
+  if (value.includes("verb")) return `[subject] + ${term} + [object/complement]`;
+  if (value.includes("noun")) return `[adjective] + ${term} / the ${term} of ...`;
+  return `use “${term}” in an academic sentence`;
+};
+
+/**
+ * @param {any} entry
+ * @param {any[] | Map<string, any>} entriesOrIndex
+ */
+export const buildFamilyProfiles = (entry, entriesOrIndex = []) => {
+  const index = entriesOrIndex instanceof Map
+    ? entriesOrIndex
+    : new Map(entriesOrIndex.map((item) => [item.term.toLowerCase(), item]));
+
+  return unique([entry.term, ...(entry.family ?? [])]).map((term) => {
+    const linkedEntry = index.get(term.toLowerCase());
+    const partOfSpeech = linkedEntry?.partOfSpeech
+      ?? (term.toLowerCase() === entry.term.toLowerCase()
+        ? entry.partOfSpeech
+        : inferWordFormType(term));
+
+    return {
+      term,
+      partOfSpeech,
+      meaningVi: linkedEntry?.meaningVi
+        ?? `${wordClassVi(partOfSpeech)} cùng họ với “${entry.term}”, mang nghĩa liên quan đến ${entry.meaningVi}`,
+      usageFrame: linkedEntry?.example ?? usageFrameFor(term, partOfSpeech),
+      verified: Boolean(linkedEntry),
+    };
+  });
 };
 
 const patternExample = (pattern, source) => `Academic frame: “${pattern}” Source example: ${source.example}`;

@@ -10,7 +10,9 @@ LexiBloom is a Vietnamese-first vocabulary learning app for IELTS. It treats eve
 - At least 80 words or phrases in every one of the 21 visible topic collections
 - Vietnamese meaning, English definition, IPA, stress guide, word class, CEFR level, and example
 - Collocations, synonyms, antonyms, word families, and a visible word-class label for every entry
+- Structured word-family cards with a class, Vietnamese meaning, usage frame, and verification label for every form
 - Search and filters by collection (IELTS Reading/AWL), AWL sublist, topic, entry type (including academic patterns and prepositional phrases), and level
+- A dedicated collocation workshop for preposition gaps, tap-to-order phrase building, and typed error correction
 - UK/US browser pronunciation
 - Multiple-choice and typed-answer quizzes for meaning, collocation, synonym, and pronunciation
 - Built-in sound effects for taps, correct answers, mistakes, collection actions, and session completion

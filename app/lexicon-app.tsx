@@ -2,8 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { lexicon, lexiconStats, topics, type WordEntry } from "./lexicon-data";
-import { inferWordFormType } from "./lexical-enrichment.js";
 import { advanceReviewQueue, mistakeSignature, uniqueMistakes } from "./mistake-review.js";
+import { makeCorrectionExercise, makePrepositionExercise, makeWordOrderExercise } from "./pattern-practice.js";
 import {
   dateKey,
   dueReviewIds,
@@ -12,9 +12,20 @@ import {
   wordOfDayIndex,
 } from "./study-progress.js";
 
-type View = "explore" | "quiz-choice" | "quiz-typing" | "mistakes" | "review-mistakes";
+type View = "explore" | "patterns" | "quiz-choice" | "quiz-typing" | "mistakes" | "review-mistakes";
 type QuizFocus = "mixed" | "meaning" | "collocation" | "synonym" | "pronunciation";
 type QuizSource = "all" | "due";
+type PatternMode = "preposition" | "builder" | "correction";
+
+type PatternExercise = {
+  kind: PatternMode;
+  entry: WordEntry;
+  prompt: string;
+  answer: string;
+  answerPhrase: string;
+  options: string[];
+  tokens: Array<{ id: string; word: string }>;
+};
 
 type Question = {
   kind: Exclude<QuizFocus, "mixed">;
@@ -65,6 +76,7 @@ const focusLabels: Record<QuizFocus, string> = {
 
 const navItems: { id: View; label: string; short: string; icon: string }[] = [
   { id: "explore", label: "Kho từ vựng", short: "Kho từ", icon: "⌂" },
+  { id: "patterns", label: "Luyện cụm & giới từ", short: "Luyện cụm", icon: "▦" },
   { id: "quiz-choice", label: "Trắc nghiệm", short: "Trắc nghiệm", icon: "◆" },
   { id: "quiz-typing", label: "Tự gõ đáp án", short: "Tự gõ", icon: "✎" },
   { id: "mistakes", label: "Sổ lỗi", short: "Sổ lỗi", icon: "↻" },
@@ -409,6 +421,16 @@ export default function LexiconApp() {
   const [collectionFilter, setCollectionFilter] = useState("Tất cả");
   const [visibleCount, setVisibleCount] = useState(120);
   const [selectedId, setSelectedId] = useState(lexicon[25].id);
+  const [patternMode, setPatternMode] = useState<PatternMode>("preposition");
+  const [patternExercise, setPatternExercise] = useState<PatternExercise | null>(
+    () => makePrepositionExercise(lexicon, () => 0) as PatternExercise | null,
+  );
+  const [patternSelectedTokenIds, setPatternSelectedTokenIds] = useState<string[]>([]);
+  const [patternSubmitted, setPatternSubmitted] = useState("");
+  const [patternDraft, setPatternDraft] = useState("");
+  const [patternAnswered, setPatternAnswered] = useState(false);
+  const [patternCorrect, setPatternCorrect] = useState(false);
+  const [patternScore, setPatternScore] = useState(0);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [mastered, setMastered] = useState<string[]>([]);
   const [mistakes, setMistakes] = useState<Mistake[]>([]);
@@ -545,6 +567,20 @@ export default function LexiconApp() {
 
   const visibleEntries = filtered.slice(0, visibleCount);
   const selected = filtered.find((entry) => entry.id === selectedId) ?? filtered[0] ?? lexicon[0];
+  const selectedFamilyProfiles = selected.familyProfiles?.length
+    ? selected.familyProfiles
+    : [{
+        term: selected.term,
+        partOfSpeech: selected.partOfSpeech,
+        meaningVi: selected.meaningVi,
+        usageFrame: selected.example,
+        verified: true,
+      }];
+  const assembledPattern = patternExercise?.tokens
+    .filter((token) => patternSelectedTokenIds.includes(token.id))
+    .sort((left, right) => patternSelectedTokenIds.indexOf(left.id) - patternSelectedTokenIds.indexOf(right.id))
+    .map((token) => token.word)
+    .join(" ") ?? "";
   const masteredPercent = Math.round((mastered.length / lexicon.length) * 100);
   const featured = featuredEntries[wordOfDayIndex(featuredEntries.length)] ?? lexicon[0];
   const reviewableMistakes = useMemo(() => uniqueMistakes(mistakes), [mistakes]);
@@ -571,6 +607,46 @@ export default function LexiconApp() {
     setQuestionNumber(1);
     setSessionComplete(false);
     setView(nextView);
+  };
+
+  const startPatternPractice = (nextMode: PatternMode = patternMode) => {
+    const exercise = (nextMode === "preposition"
+      ? makePrepositionExercise(lexicon)
+      : nextMode === "builder"
+        ? makeWordOrderExercise(lexicon)
+        : makeCorrectionExercise(lexicon)) as PatternExercise | null;
+    if (!exercise) return;
+    playSound("tap");
+    setPatternMode(nextMode);
+    setPatternExercise(exercise);
+    setPatternSelectedTokenIds([]);
+    setPatternSubmitted("");
+    setPatternDraft("");
+    setPatternAnswered(false);
+    setPatternCorrect(false);
+    setView("patterns");
+  };
+
+  const submitPatternPractice = (answer: string) => {
+    if (!patternExercise || patternAnswered || !answer.trim()) return;
+    const isCorrect = normalise(answer) === normalise(patternExercise.answer);
+    setPatternSubmitted(answer);
+    setPatternAnswered(true);
+    setPatternCorrect(isCorrect);
+    markStudyDay();
+    setDailyProgress((current) => recordDailyAnswer(current, isCorrect));
+    setReviewSchedule((current) => ({
+      ...current,
+      [patternExercise.entry.id]: scheduleReview(current[patternExercise.entry.id], isCorrect),
+    }));
+
+    if (isCorrect) {
+      playSound("correct");
+      setPatternScore((current) => current + 1);
+      setXp((current) => current + 5);
+    } else {
+      playSound("wrong");
+    }
   };
 
   const navigateTo = (nextView: View) => {
@@ -939,15 +1015,88 @@ export default function LexiconApp() {
                 </div>
 
                 <div className="detail-section family-section">
-                  <div className="section-title"><span>04</span><h3>Word family</h3></div>
-                  <div className="family-flow">
-                    <strong><em>{selected.term}</em><small>{selected.partOfSpeech}</small></strong>
-                    <b>→</b>
-                    {selected.family.map((item) => <span key={item}><em>{item}</em><small>{normalise(item) === normalise(selected.term) ? selected.partOfSpeech : inferWordFormType(item)}</small></span>)}
+                  <div className="section-title"><span>04</span><h3>Word family · từ loại · khung dùng</h3></div>
+                  <div className="family-profile-grid">
+                    {selectedFamilyProfiles.map((profile) => (
+                      <article key={profile.term}>
+                        <div><strong>{profile.term}</strong><span>{profile.partOfSpeech}</span><em>{profile.verified ? "Đã đối chiếu" : "Dạng liên hệ"}</em></div>
+                        <p>{profile.meaningVi}</p>
+                        <small>{profile.verified ? "Ví dụ" : "Khung dùng"}</small>
+                        <code>{profile.usageFrame}</code>
+                      </article>
+                    ))}
                   </div>
                 </div>
               </article>
             </section>
+          </div>
+        )}
+
+        {view === "patterns" && patternExercise && (
+          <div className="content-wrap pattern-practice-view">
+            <section className="pattern-practice-heading">
+              <div><p className="eyebrow">COLLOCATION WORKSHOP</p><h1>Luyện cụm & giới từ</h1><p>Không học từng từ rời. Điền đúng giới từ và tự ráp lại cụm học thuật để nhớ theo khối.</p></div>
+              <div className="pattern-session-score"><span>Đúng trong phiên</span><strong>{patternScore}</strong><small>+{patternScore * 5} XP</small></div>
+            </section>
+
+            <div className="pattern-mode-tabs" role="tablist" aria-label="Chọn dạng luyện cụm">
+              <button type="button" className={patternMode === "preposition" ? "active" : ""} onClick={() => startPatternPractice("preposition")}><span>01</span><strong>Điền giới từ</strong><small>of · in · on · to · for...</small></button>
+              <button type="button" className={patternMode === "builder" ? "active" : ""} onClick={() => startPatternPractice("builder")}><span>02</span><strong>Xếp cụm từ</strong><small>Chạm từng mảnh theo đúng thứ tự</small></button>
+              <button type="button" className={patternMode === "correction" ? "active" : ""} onClick={() => startPatternPractice("correction")}><span>03</span><strong>Sửa cụm sai</strong><small>Tự viết lại toàn bộ cụm đúng</small></button>
+            </div>
+
+            <section className={`pattern-practice-card ${patternAnswered ? (patternCorrect ? "is-correct" : "is-wrong") : ""}`}>
+              <div className="pattern-card-meta"><span>{patternExercise.entry.topic}</span><b>{patternExercise.entry.level}</b><em>{patternMode === "preposition" ? "PREPOSITION GAP" : patternMode === "builder" ? "PHRASE BUILDER" : "ERROR CORRECTION"}</em></div>
+              <p className="pattern-instruction">{patternMode === "preposition" ? "Chọn giới từ còn thiếu" : patternMode === "builder" ? `Sắp xếp thành cụm mang nghĩa: “${patternExercise.prompt}”` : "Cụm dưới đây dùng sai giới từ — hãy viết lại cho đúng"}</p>
+
+              {patternMode === "preposition" ? (
+                <>
+                  <h2>{patternExercise.prompt}</h2>
+                  <div className="preposition-options">
+                    {patternExercise.options.map((option) => (
+                      <button
+                        type="button"
+                        key={option}
+                        disabled={patternAnswered}
+                        className={patternAnswered && option === patternExercise.answer ? "correct" : patternAnswered && option === patternSubmitted ? "wrong" : ""}
+                        onClick={() => submitPatternPractice(option)}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : patternMode === "builder" ? (
+                <>
+                  <div className={`phrase-build-zone ${assembledPattern ? "has-words" : ""}`}>
+                    {patternSelectedTokenIds.length ? patternSelectedTokenIds.map((tokenId) => {
+                      const token = patternExercise.tokens.find((item) => item.id === tokenId);
+                      return token ? <button type="button" key={token.id} disabled={patternAnswered} onClick={() => setPatternSelectedTokenIds((current) => current.filter((item) => item !== token.id))}>{token.word}</button> : null;
+                    }) : <span>Chạm các mảnh bên dưới để ráp cụm...</span>}
+                  </div>
+                  <div className="phrase-token-bank">
+                    {patternExercise.tokens.filter((token) => !patternSelectedTokenIds.includes(token.id)).map((token) => <button type="button" key={token.id} disabled={patternAnswered} onClick={() => setPatternSelectedTokenIds((current) => [...current, token.id])}>{token.word}</button>)}
+                  </div>
+                  {!patternAnswered && <div className="phrase-builder-actions"><button type="button" onClick={() => setPatternSelectedTokenIds((current) => current.slice(0, -1))} disabled={!patternSelectedTokenIds.length}>Hoàn tác</button><button type="button" className="check-pattern-button" onClick={() => submitPatternPractice(assembledPattern)} disabled={patternSelectedTokenIds.length !== patternExercise.tokens.length}>Kiểm tra cụm</button></div>}
+                </>
+              ) : (
+                <form className="pattern-correction-form" onSubmit={(event) => { event.preventDefault(); submitPatternPractice(patternDraft); }}>
+                  <h2>{patternExercise.prompt}</h2>
+                  <label><span>Viết lại cụm đúng</span><input value={patternDraft} disabled={patternAnswered} onChange={(event) => setPatternDraft(event.target.value)} placeholder="Gõ lại toàn bộ cụm..." autoComplete="off" /></label>
+                  {!patternAnswered && <button type="submit" disabled={!patternDraft.trim()}>Kiểm tra & sửa lỗi</button>}
+                </form>
+              )}
+
+              {patternAnswered && (
+                <div className="pattern-feedback">
+                  <span>{patternCorrect ? "✓" : "!"}</span>
+                  <div><strong>{patternCorrect ? "+5 XP · Đúng cụm rồi!" : "Chưa đúng — xem lại trật tự và giới từ."}</strong><p>Cụm chuẩn: <b>{patternExercise.answerPhrase}</b></p><small>{patternExercise.entry.example}</small></div>
+                  <button type="button" onClick={() => startPatternPractice(patternMode)}>Câu tiếp theo →</button>
+                </div>
+              )}
+            </section>
+
+            <section className="pattern-practice-note"><strong>Mẹo nhớ theo khối</strong><p>Đọc cả cụm thành tiếng, thay phần “X/…” bằng ý của bạn rồi dùng lại trong một câu Writing.</p></section>
           </div>
         )}
 
