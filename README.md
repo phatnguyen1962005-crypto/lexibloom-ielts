@@ -1,6 +1,6 @@
-# IELTS Lexicon
+# LexiBloom — IELTS Vocabulary
 
-IELTS Lexicon is a Vietnamese-first vocabulary learning system for IELTS. It treats every entry as a connected lexical profile rather than an isolated translation.
+LexiBloom is a Vietnamese-first vocabulary learning app for IELTS. It treats every entry as a connected lexical profile rather than an isolated translation.
 
 ## Included
 
@@ -10,7 +10,9 @@ IELTS Lexicon is a Vietnamese-first vocabulary learning system for IELTS. It tre
 - Search and filters by topic, entry type, and level
 - UK/US browser pronunciation
 - Multiple-choice and typed-answer quizzes for meaning, collocation, synonym, and pronunciation
-- Local favorites, mastery progress, and an automatic mistake notebook
+- Built-in sound effects for taps, correct answers, mistakes, collection actions, and session completion
+- Daily goals, XP, learning streaks, session results, and animated feedback
+- Local favorites, mastery progress, sound preference, and an automatic mistake notebook
 - Responsive desktop and mobile layouts
 
 ## Run locally
