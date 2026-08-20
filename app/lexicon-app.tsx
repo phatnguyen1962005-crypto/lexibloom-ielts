@@ -12,6 +12,7 @@ type Question = {
   prompt: string;
   helper?: string;
   answer: string;
+  acceptedAnswers?: string[];
   options: string[];
   entry: WordEntry;
 };
@@ -140,6 +141,7 @@ function makeQuestion(focus: QuizFocus, multipleChoice: boolean): Question {
       prompt: entry.term,
       helper: entry.definitionEn,
       answer,
+      acceptedAnswers: entry.synonyms,
       entry,
       options: shuffle([answer, ...candidates]),
     };
@@ -266,7 +268,8 @@ export default function LexiconApp() {
 
   const submitAnswer = (answer: string) => {
     if (!question || answered || !answer.trim()) return;
-    const isCorrect = normalise(answer) === normalise(question.answer);
+    const acceptedAnswers = question.acceptedAnswers ?? [question.answer];
+    const isCorrect = acceptedAnswers.some((item) => normalise(answer) === normalise(item));
     setSubmitted(answer);
     setAnswered(true);
     setCorrect(isCorrect);
