@@ -21,6 +21,7 @@ test("creates a clean preposition gap from an academic phrase", () => {
   assert.deepEqual(prepositionGapFromPhrase("evidence of climate change"), {
     answer: "of",
     answerPhrase: "evidence of climate change",
+    patternKey: "evidence of",
     prompt: "evidence ___ climate change",
   });
 });
@@ -51,4 +52,19 @@ test("creates an incorrect phrase that the learner must rewrite", () => {
   assert.notEqual(exercise.prompt, exercise.answer);
   assert.equal(exercise.answer, "evidence of climate change");
   assert.equal(exercise.prompt.includes("___"), false);
+});
+
+test("rotates away from a repeated phrase pattern and preposition", () => {
+  const entries = [
+    entry,
+    { ...entry, id: "impact", term: "impact on public health", collocations: [] },
+    { ...entry, id: "concern", term: "concern about rising costs", collocations: [] },
+  ];
+  const first = makePrepositionExercise(entries, () => 0);
+  const next = makePrepositionExercise(entries, () => 0, first);
+
+  assert.equal(first.answerPhrase, "evidence of climate change");
+  assert.notEqual(next.answerPhrase, first.answerPhrase);
+  assert.notEqual(next.patternKey, first.patternKey);
+  assert.notEqual(next.answer, first.answer);
 });

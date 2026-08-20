@@ -17,6 +17,9 @@ const readingEntries = readJsonExport(
   "../app/reading-vocabulary-data.ts",
   "export const readingVocabularyEntries: ReadingVocabularyEntry[] = ",
 );
+const b2C1Entries = JSON.parse(
+  fs.readFileSync(new URL("../app/b2-c1-data.json", import.meta.url), "utf8"),
+);
 
 const lexiconSource = fs.readFileSync(new URL("../app/lexicon-data.ts", import.meta.url), "utf8");
 const rawLexicon = lexiconSource.match(/const rawLexicon = String\.raw`([\s\S]*?)`\.trim\(\);/)[1].trim();
@@ -68,27 +71,36 @@ const awlSupplement = awlEntries
     kind: "word",
   }));
 const baseTerms = new Set([...curatedTerms, ...awlSupplement.map((entry) => entry.term.toLowerCase())]);
-const sourceEntries = [
+const coreSourceEntries = [
   ...curatedEntries,
   ...awlSupplement,
   ...readingEntries.filter((entry) => !baseTerms.has(entry.term.toLowerCase())),
 ];
-const enrichedEntries = sourceEntries.map(enrichLearningProfile);
+const sourceEntries = [...coreSourceEntries, ...b2C1Entries];
+const enrichedCoreEntries = coreSourceEntries.map(enrichLearningProfile);
+const enrichedB2C1Entries = b2C1Entries.map(enrichLearningProfile);
+const enrichedEntries = [...enrichedCoreEntries, ...enrichedB2C1Entries];
 const sourceIndex = new Map(enrichedEntries.map((entry) => [entry.term.toLowerCase(), entry]));
-const profiledEntries = enrichedEntries.map((entry) => ({
+const profiledCoreEntries = enrichedCoreEntries.map((entry) => ({
   ...entry,
   familyProfiles: buildFamilyProfiles(entry, sourceIndex),
 }));
-const generatedEntries = buildTopicExpansion(profiledEntries, 80).map((entry) => ({
+const profiledB2C1Entries = enrichedB2C1Entries.map((entry) => ({
   ...entry,
   familyProfiles: buildFamilyProfiles(entry, sourceIndex),
 }));
-const finalEntries = [...profiledEntries, ...generatedEntries];
+const generatedEntries = buildTopicExpansion(profiledCoreEntries, 80).map((entry) => ({
+  ...entry,
+  familyProfiles: buildFamilyProfiles(entry, sourceIndex),
+}));
+const finalEntries = [...profiledCoreEntries, ...generatedEntries, ...profiledB2C1Entries];
 
-test("expands every visible topic to exactly 80 entries", () => {
-  assert.equal(sourceEntries.length, 1000);
+test("adds 1,500 B2-C1 entries while keeping every visible topic above the baseline", () => {
+  assert.equal(coreSourceEntries.length, 1000);
+  assert.equal(b2C1Entries.length, 1500);
+  assert.equal(sourceEntries.length, 2500);
   assert.equal(generatedEntries.length, 1231);
-  assert.equal(finalEntries.length, 2231);
+  assert.equal(finalEntries.length, 3731);
 
   const counts = new Map();
   for (const entry of finalEntries) {
@@ -96,10 +108,18 @@ test("expands every visible topic to exactly 80 entries", () => {
     counts.set(entry.topic, (counts.get(entry.topic) ?? 0) + 1);
   }
 
-  assert.equal(counts.size, 21);
+  assert.equal(counts.size, 22);
   for (const [topic, count] of counts) {
-    assert.equal(count, 80, `${topic} should contain 80 entries`);
+    assert.ok(count >= 80, `${topic} should contain at least 80 entries`);
   }
+});
+
+test("keeps the promised CEFR, collection, and phrase mix", () => {
+  assert.equal(b2C1Entries.filter((entry) => entry.level === "B2").length, 1000);
+  assert.equal(b2C1Entries.filter((entry) => entry.level === "C1").length, 500);
+  assert.equal(b2C1Entries.filter((entry) => entry.b2c1Track === "ielts").length, 900);
+  assert.equal(b2C1Entries.filter((entry) => entry.b2c1Track === "general").length, 600);
+  assert.equal(b2C1Entries.filter((entry) => entry.kind === "phrase").length, 150);
 });
 
 test("keeps every entry unique and gives it a complete lexical profile", () => {

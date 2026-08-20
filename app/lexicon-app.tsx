@@ -23,6 +23,7 @@ type PatternExercise = {
   prompt: string;
   answer: string;
   answerPhrase: string;
+  patternKey?: string;
   options: string[];
   tokens: Array<{ id: string; word: string }>;
 };
@@ -553,6 +554,7 @@ export default function LexiconApp() {
       const matchesCollection = collectionFilter === "Tất cả"
         || (collectionFilter === "IELTS Reading 330" && entry.readingSource)
         || (collectionFilter === "AWL 570" && entry.awlSublist !== undefined)
+        || collectionFilter === entry.sourceCollection
         || (collectionFilter === "Ngoài AWL" && entry.awlSublist === undefined)
         || collectionFilter === `Sublist ${entry.awlSublist}`;
       return (
@@ -611,10 +613,10 @@ export default function LexiconApp() {
 
   const startPatternPractice = (nextMode: PatternMode = patternMode) => {
     const exercise = (nextMode === "preposition"
-      ? makePrepositionExercise(lexicon)
+      ? makePrepositionExercise(lexicon, Math.random, patternExercise)
       : nextMode === "builder"
-        ? makeWordOrderExercise(lexicon)
-        : makeCorrectionExercise(lexicon)) as PatternExercise | null;
+        ? makeWordOrderExercise(lexicon, Math.random, patternExercise)
+        : makeCorrectionExercise(lexicon, Math.random, patternExercise)) as PatternExercise | null;
     if (!exercise) return;
     playSound("tap");
     setPatternMode(nextMode);
@@ -871,7 +873,7 @@ export default function LexiconApp() {
           <div className="content-wrap explore-view">
             <section className="learning-hero">
               <div className="hero-copy">
-                <span className="hero-badge"><i /> {lexiconStats.entries.toLocaleString("vi-VN")} mục · 80/chủ đề · {(lexiconStats.patterns + lexiconStats.prepositionalPhrases).toLocaleString("vi-VN")} patterns</span>
+                <span className="hero-badge"><i /> {lexiconStats.entries.toLocaleString("vi-VN")} mục · +1.500 B2–C1 · {(lexiconStats.patterns + lexiconStats.prepositionalPhrases).toLocaleString("vi-VN")} patterns</span>
                 <h1>Biến từ mới thành<br/><em>phản xạ thật.</em></h1>
                 <p>Học nghĩa, nghe phát âm, nối collocation và tự kiểm tra — mỗi ngày một chút, nhớ lâu hơn hẳn.</p>
                 <div className="hero-actions">
@@ -939,7 +941,7 @@ export default function LexiconApp() {
                 {query && <button type="button" onClick={() => { setQuery(""); setVisibleCount(120); }} aria-label="Xóa tìm kiếm">×</button>}
               </label>
               <div className="filter-row">
-                <label><span>Bộ từ</span><select value={collectionFilter} onChange={(event) => { setCollectionFilter(event.target.value); setVisibleCount(120); }}><option>Tất cả</option><option>IELTS Reading 330</option><option>AWL 570</option>{Array.from({ length: 10 }, (_, index) => <option key={index + 1}>Sublist {index + 1}</option>)}<option>Ngoài AWL</option></select></label>
+                <label><span>Bộ từ</span><select value={collectionFilter} onChange={(event) => { setCollectionFilter(event.target.value); setVisibleCount(120); }}><option>Tất cả</option><option>B2–C1 IELTS</option><option>B2–C1 General</option><option>IELTS Reading 330</option><option>AWL 570</option>{Array.from({ length: 10 }, (_, index) => <option key={index + 1}>Sublist {index + 1}</option>)}<option>Ngoài AWL</option></select></label>
                 <label><span>Chủ đề</span><select value={topic} onChange={(event) => { setTopic(event.target.value); setVisibleCount(120); }}>{topics.map((item) => <option key={item}>{item}</option>)}</select></label>
                 <label><span>Loại</span><select value={kind} onChange={(event) => { setKind(event.target.value); setVisibleCount(120); }}><option>Tất cả</option><option value="word">Từ đơn</option><option value="phrase">Cụm từ</option><option value="collocation">Collocation</option><option value="pattern">Academic pattern</option><option value="prepositional-phrase">Cụm giới từ</option></select></label>
                 <label><span>Trình độ</span><select value={level} onChange={(event) => { setLevel(event.target.value); setVisibleCount(120); }}><option>Tất cả</option><option>B1</option><option>B2</option><option>C1</option></select></label>
@@ -959,7 +961,7 @@ export default function LexiconApp() {
                       onClick={() => { playSound("tap"); setSelectedId(entry.id); }}
                     >
                       <span className="word-main"><strong>{entry.term}</strong><small>{entry.patternSource ? `IPA từ trọng tâm ${entry.patternSource}: ${entry.ipa}` : entry.ipa} · {entry.partOfSpeech}</small></span>
-                      <span className="word-topic">{entry.readingSource ? `Reading · ${entry.topic}` : entry.awlSublist ? `AWL · S${entry.awlSublist}` : entry.topic}</span>
+                      <span className="word-topic">{entry.sourceCollection ? `${entry.sourceCollection.replace("B2–C1 ", "")} · ${entry.topic}` : entry.readingSource ? `Reading · ${entry.topic}` : entry.awlSublist ? `AWL · S${entry.awlSublist}` : entry.topic}</span>
                       <span className={`level-tag level-${entry.level.toLowerCase()}`}>{entry.level}</span>
                     </button>
                   ))}

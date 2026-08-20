@@ -1,4 +1,10 @@
 import { AWL_HEADWORD_COUNT, awlSourceEntries } from "./awl-data";
+import {
+  B2_C1_ENTRY_COUNT,
+  B2_C1_GENERAL_COUNT,
+  B2_C1_IELTS_COUNT,
+  b2C1Entries,
+} from "./b2-c1-data";
 import { buildFamilyProfiles, buildTopicExpansion, enrichLearningProfile } from "./lexical-enrichment.js";
 import { READING_VOCABULARY_COUNT, readingVocabularyEntries } from "./reading-vocabulary-data";
 
@@ -31,6 +37,9 @@ export type WordEntry = {
   awlSublist?: number;
   readingSource?: boolean;
   patternSource?: string;
+  sourceCollection?: "B2–C1 IELTS" | "B2–C1 General";
+  b2c1Track?: "ielts" | "general";
+  cefrSource?: string;
   familyProfiles?: FamilyProfile[];
 };
 
@@ -236,19 +245,27 @@ const readingSupplement = readingVocabularyEntries.filter(
   (entry) => !baseTerms.has(entry.term.toLowerCase()),
 );
 
-const sourceLexicon: WordEntry[] = [...baseLexicon, ...readingSupplement];
-const enrichedProfiles = sourceLexicon.map((entry) => enrichLearningProfile(entry) as WordEntry);
+const coreSourceLexicon: WordEntry[] = [...baseLexicon, ...readingSupplement];
+const b2C1Supplement = b2C1Entries as WordEntry[];
+const sourceLexicon: WordEntry[] = [...coreSourceLexicon, ...b2C1Supplement];
+const enrichedCoreProfiles = coreSourceLexicon.map((entry) => enrichLearningProfile(entry) as WordEntry);
+const enrichedB2C1Profiles = b2C1Supplement.map((entry) => enrichLearningProfile(entry) as WordEntry);
+const enrichedProfiles = [...enrichedCoreProfiles, ...enrichedB2C1Profiles];
 const sourceIndex = new Map(enrichedProfiles.map((entry) => [entry.term.toLowerCase(), entry]));
-const enrichedSourceLexicon = enrichedProfiles.map((entry) => ({
+const enrichedCoreLexicon = enrichedCoreProfiles.map((entry) => ({
   ...entry,
   familyProfiles: buildFamilyProfiles(entry, sourceIndex) as FamilyProfile[],
 }));
-const topicExpansion = (buildTopicExpansion(enrichedSourceLexicon, 80) as WordEntry[]).map((entry) => ({
+const enrichedB2C1Lexicon = enrichedB2C1Profiles.map((entry) => ({
+  ...entry,
+  familyProfiles: buildFamilyProfiles(entry, sourceIndex) as FamilyProfile[],
+}));
+const topicExpansion = (buildTopicExpansion(enrichedCoreLexicon, 80) as WordEntry[]).map((entry) => ({
   ...entry,
   familyProfiles: buildFamilyProfiles(entry, sourceIndex) as FamilyProfile[],
 }));
 
-export const lexicon: WordEntry[] = [...enrichedSourceLexicon, ...topicExpansion];
+export const lexicon: WordEntry[] = [...enrichedCoreLexicon, ...topicExpansion, ...enrichedB2C1Lexicon];
 
 export const topics = [
   "Tất cả",
@@ -268,4 +285,7 @@ export const lexiconStats = {
   topicTarget: 80,
   awlHeadwords: AWL_HEADWORD_COUNT,
   readingVocabulary: READING_VOCABULARY_COUNT,
+  b2C1Entries: B2_C1_ENTRY_COUNT,
+  b2C1Ielts: B2_C1_IELTS_COUNT,
+  b2C1General: B2_C1_GENERAL_COUNT,
 };

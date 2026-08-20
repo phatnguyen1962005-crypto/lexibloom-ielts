@@ -6,13 +6,14 @@ LexiBloom is a Vietnamese-first vocabulary learning app for IELTS. It treats eve
 
 - The complete Academic Word List: 570 headword families across all 10 frequency sublists
 - 330 additional words and phrases organised into 15 fields represented in IELTS Academic Reading samples
-- 2,231 unique learning entries: 1,000 curated/AWL/Reading source entries plus 1,231 reusable academic and prepositional patterns
-- At least 80 words or phrases in every one of the 21 visible topic collections
+- 1,500 additional high-utility B2–C1 entries: 900 IELTS/academic, 600 general English, 1,000 B2, 500 C1, and 150 multiword expressions
+- 3,731 unique learning entries: 2,500 source entries plus 1,231 reusable academic and prepositional patterns
+- At least 80 words or phrases in every one of the 22 visible topic collections
 - Vietnamese meaning, English definition, IPA, stress guide, word class, CEFR level, and example
 - Collocations, synonyms, antonyms, word families, and a visible word-class label for every entry
 - Structured word-family cards with a class, Vietnamese meaning, usage frame, and verification label for every form
-- Search and filters by collection (IELTS Reading/AWL), AWL sublist, topic, entry type (including academic patterns and prepositional phrases), and level
-- A dedicated collocation workshop for preposition gaps, tap-to-order phrase building, and typed error correction
+- Search and filters by collection (B2–C1 IELTS, B2–C1 General, IELTS Reading, and AWL), AWL sublist, topic, entry type, and level
+- A dedicated collocation workshop for balanced preposition gaps, tap-to-order phrase building, and typed error correction
 - UK/US browser pronunciation
 - Multiple-choice and typed-answer quizzes for meaning, collocation, synonym, and pronunciation
 - Built-in sound effects for taps, correct answers, mistakes, collection actions, and session completion
@@ -38,7 +39,7 @@ Then open the local URL printed by the development server.
 npm run build
 ```
 
-The curated IELTS dataset is stored in `app/lexicon-data.ts`. The generated AWL dataset is kept separately in `app/awl-data.ts`; the IELTS Reading collection is in `app/reading-vocabulary-data.ts`, with its researched topic selection recorded in `data/reading-vocabulary-seeds.json`. All three collections are merged without duplicate headwords at runtime, enriched with learning profiles, and expanded by `app/lexical-enrichment.js` to guarantee the topic minimum.
+The curated IELTS dataset is stored in `app/lexicon-data.ts`. The generated AWL dataset is kept separately in `app/awl-data.ts`; the IELTS Reading collection is in `app/reading-vocabulary-data.ts`, and the B2–C1 expansion is in `app/b2-c1-data.json`. The collections are merged without duplicate entries at runtime, enriched with learning profiles, and expanded by `app/lexical-enrichment.js` to guarantee the topic minimum.
 
 ## Vocabulary data sources
 
@@ -47,6 +48,9 @@ The curated IELTS dataset is stored in `app/lexicon-data.ts`. The generated AWL 
 - The Reading collection is organised from fields represented in official IELTS Academic Reading sample passages, including science, evolution, health, transport, history, language, law, environment, and agriculture.
 - Definitions for the Reading collection combine English Wiktionary lexical data with short topic definitions and selected Wikipedia introductions (CC BY-SA).
 - Vietnamese glosses are included as short educational translations and should be interpreted in the context of each English definition.
+- B2/C1 labels are selected from the CEFR-J Vocabulary Profile and Octanove C1/C2 Profile; general-use priority is informed by an OpenSubtitles frequency list.
+- Vietnamese meanings, IPA, and examples for the B2–C1 expansion are adapted from the Skypedia/MinhQND open English–Vietnamese dictionary; English definitions and synonyms are supplemented from Princeton WordNet.
+- Full attribution and data-license details for the B2–C1 subset are recorded in [`data/B2_C1_ATTRIBUTION.md`](data/B2_C1_ATTRIBUTION.md).
 
 Reading-topic references:
 
