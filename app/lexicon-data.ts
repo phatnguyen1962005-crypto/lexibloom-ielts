@@ -1,8 +1,16 @@
 import { AWL_HEADWORD_COUNT, awlSourceEntries } from "./awl-data";
-import { buildTopicExpansion, enrichLearningProfile } from "./lexical-enrichment.js";
+import { buildFamilyProfiles, buildTopicExpansion, enrichLearningProfile } from "./lexical-enrichment.js";
 import { READING_VOCABULARY_COUNT, readingVocabularyEntries } from "./reading-vocabulary-data";
 
 export type LexiconKind = "word" | "phrase" | "collocation" | "pattern" | "prepositional-phrase";
+
+export type FamilyProfile = {
+  term: string;
+  partOfSpeech: string;
+  meaningVi: string;
+  usageFrame: string;
+  verified: boolean;
+};
 
 export type WordEntry = {
   id: string;
@@ -23,6 +31,7 @@ export type WordEntry = {
   awlSublist?: number;
   readingSource?: boolean;
   patternSource?: string;
+  familyProfiles?: FamilyProfile[];
 };
 
 export type ReadingVocabularyEntry = WordEntry & { readingSource: true };
@@ -228,8 +237,16 @@ const readingSupplement = readingVocabularyEntries.filter(
 );
 
 const sourceLexicon: WordEntry[] = [...baseLexicon, ...readingSupplement];
-const enrichedSourceLexicon = sourceLexicon.map((entry) => enrichLearningProfile(entry) as WordEntry);
-const topicExpansion = buildTopicExpansion(enrichedSourceLexicon, 80) as WordEntry[];
+const enrichedProfiles = sourceLexicon.map((entry) => enrichLearningProfile(entry) as WordEntry);
+const sourceIndex = new Map(enrichedProfiles.map((entry) => [entry.term.toLowerCase(), entry]));
+const enrichedSourceLexicon = enrichedProfiles.map((entry) => ({
+  ...entry,
+  familyProfiles: buildFamilyProfiles(entry, sourceIndex) as FamilyProfile[],
+}));
+const topicExpansion = (buildTopicExpansion(enrichedSourceLexicon, 80) as WordEntry[]).map((entry) => ({
+  ...entry,
+  familyProfiles: buildFamilyProfiles(entry, sourceIndex) as FamilyProfile[],
+}));
 
 export const lexicon: WordEntry[] = [...enrichedSourceLexicon, ...topicExpansion];
 

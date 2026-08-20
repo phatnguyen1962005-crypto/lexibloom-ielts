@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { buildTopicExpansion, enrichLearningProfile } from "../app/lexical-enrichment.js";
+import { buildFamilyProfiles, buildTopicExpansion, enrichLearningProfile } from "../app/lexical-enrichment.js";
 
 const readJsonExport = (path, marker) => {
   const source = fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -74,8 +74,16 @@ const sourceEntries = [
   ...readingEntries.filter((entry) => !baseTerms.has(entry.term.toLowerCase())),
 ];
 const enrichedEntries = sourceEntries.map(enrichLearningProfile);
-const generatedEntries = buildTopicExpansion(enrichedEntries, 80);
-const finalEntries = [...enrichedEntries, ...generatedEntries];
+const sourceIndex = new Map(enrichedEntries.map((entry) => [entry.term.toLowerCase(), entry]));
+const profiledEntries = enrichedEntries.map((entry) => ({
+  ...entry,
+  familyProfiles: buildFamilyProfiles(entry, sourceIndex),
+}));
+const generatedEntries = buildTopicExpansion(profiledEntries, 80).map((entry) => ({
+  ...entry,
+  familyProfiles: buildFamilyProfiles(entry, sourceIndex),
+}));
+const finalEntries = [...profiledEntries, ...generatedEntries];
 
 test("expands every visible topic to exactly 80 entries", () => {
   assert.equal(sourceEntries.length, 1000);
@@ -101,8 +109,34 @@ test("keeps every entry unique and gives it a complete lexical profile", () => {
   for (const entry of finalEntries) {
     assert.ok(entry.partOfSpeech, `${entry.term} is missing a word class`);
     assert.ok(entry.family.length >= 1, `${entry.term} is missing its word-family profile`);
+    assert.ok(entry.familyProfiles.length >= 1, `${entry.term} is missing structured family details`);
+    assert.ok(entry.familyProfiles.every((form) => form.partOfSpeech && form.meaningVi && form.usageFrame));
     assert.ok(entry.collocations.length >= 3, `${entry.term} needs at least three patterns or collocations`);
   }
+});
+
+test("uses linked entries to verify word-family meaning, class, and example", () => {
+  const source = {
+    term: "analyse",
+    partOfSpeech: "verb",
+    meaningVi: "phân tích",
+    family: ["analysis"],
+    example: "Researchers analyse the evidence.",
+  };
+  const linked = {
+    term: "analysis",
+    partOfSpeech: "noun",
+    meaningVi: "sự phân tích",
+    family: ["analyse"],
+    example: "The analysis revealed a clear trend.",
+  };
+  const profiles = buildFamilyProfiles(source, new Map([["analyse", source], ["analysis", linked]]));
+  const analysis = profiles.find((item) => item.term === "analysis");
+
+  assert.equal(analysis.partOfSpeech, "noun");
+  assert.equal(analysis.meaningVi, "sự phân tích");
+  assert.equal(analysis.usageFrame, linked.example);
+  assert.equal(analysis.verified, true);
 });
 
 test("adds both academic patterns and prepositional phrases", () => {
