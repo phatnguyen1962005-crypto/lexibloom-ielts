@@ -4,10 +4,11 @@ LexiBloom is a Vietnamese-first vocabulary learning app for IELTS. It treats eve
 
 ## Included
 
-- 119 curated academic words, phrases, and collocations across 12 IELTS topic groups
+- The complete Academic Word List: 570 headword families across all 10 frequency sublists
+- Curated academic words, IELTS phrases, and collocations across 12 topic groups
 - Vietnamese meaning, English definition, IPA, stress guide, word class, CEFR level, and example
 - Collocations, synonyms, antonyms, and word families
-- Search and filters by topic, entry type, and level
+- Search and filters by AWL collection/sublist, topic, entry type, and level
 - UK/US browser pronunciation
 - Multiple-choice and typed-answer quizzes for meaning, collocation, synonym, and pronunciation
 - Built-in sound effects for taps, correct answers, mistakes, collection actions, and session completion
@@ -30,7 +31,13 @@ Then open the local URL printed by the development server.
 npm run build
 ```
 
-The vocabulary dataset is stored in `app/lexicon-data.ts`. Add a new pipe-delimited row using the same 14-field format to extend the library.
+The curated IELTS dataset is stored in `app/lexicon-data.ts`. The generated AWL dataset is kept separately in `app/awl-data.ts`, then merged without duplicate headwords at runtime.
+
+## Vocabulary data sources
+
+- AWL headwords, word families, and sublists are adapted from `lpmi-13/machine_readable_wordlists` (CC0), based on Averil Coxhead's Academic Word List.
+- English lexical fields in the generated AWL dataset are adapted from English Wiktionary (CC BY-SA 3.0 / GFDL) through Compact Dictionaries.
+- Vietnamese glosses are included as short educational translations and should be interpreted in the context of each English definition.
 
 ## GitHub Pages
 
@@ -44,4 +51,4 @@ npm run build:pages
 
 ## Notes
 
-IELTS does not publish an official vocabulary list. The included entries are selected for broad academic relevance and common IELTS themes; they are not an official IELTS product or band guarantee.
+IELTS does not publish an official vocabulary list. AWL is a general academic corpus-based list that is highly useful for IELTS reading and writing, but it is not an official IELTS product or band guarantee.

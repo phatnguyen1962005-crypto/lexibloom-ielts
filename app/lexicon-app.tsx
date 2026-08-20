@@ -56,6 +56,7 @@ const topicIcons: Record<string, string> = {
   "Media & Culture": "◉",
   "Data & Trends": "⌁",
   "High-value Language": "★",
+  "Academic Word List": "AWL",
 };
 
 type SoundKind = "tap" | "correct" | "wrong" | "collect" | "complete";
@@ -137,9 +138,14 @@ const collocationGloss = (gap: CollocationGap) => {
 };
 
 function makeQuestion(focus: QuizFocus, multipleChoice: boolean): Question {
-  const entry = sample(lexicon);
   const available: Question["kind"][] = ["meaning", "collocation", "synonym", "pronunciation"];
   const kind = focus === "mixed" ? sample(available) : focus;
+  const eligibleEntries = kind === "collocation"
+    ? lexicon.filter((item) => collocationGaps(item).length > 0)
+    : kind === "synonym"
+      ? lexicon.filter((item) => item.synonyms.length > 0)
+      : lexicon;
+  const entry = sample(eligibleEntries);
 
   if (kind === "meaning") {
     const reverse = Math.random() > 0.5;
@@ -289,6 +295,7 @@ export default function LexiconApp() {
   const [topic, setTopic] = useState("Tất cả");
   const [kind, setKind] = useState("Tất cả");
   const [level, setLevel] = useState("Tất cả");
+  const [awlFilter, setAwlFilter] = useState("Tất cả");
   const [selectedId, setSelectedId] = useState(lexicon[25].id);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [mastered, setMastered] = useState<string[]>([]);
@@ -360,6 +367,7 @@ export default function LexiconApp() {
 
   useEffect(() => {
     try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate browser-only progress after mount.
       setFavorites(JSON.parse(localStorage.getItem("ielts-lexicon-favorites") ?? "[]"));
       setMastered(JSON.parse(localStorage.getItem("ielts-lexicon-mastered") ?? "[]"));
       setMistakes(JSON.parse(localStorage.getItem("ielts-lexicon-mistakes") ?? "[]"));
@@ -386,6 +394,7 @@ export default function LexiconApp() {
 
   useEffect(() => {
     if (view === "quiz-choice" || view === "quiz-typing") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- changing quiz mode intentionally starts a fresh session.
       setQuestion(makeQuestion(focus, view === "quiz-choice"));
       setSubmitted("");
       setAnswered(false);
@@ -400,18 +409,23 @@ export default function LexiconApp() {
     const needle = normalise(query);
     return lexicon.filter((entry) => {
       const haystack = normalise(
-        [entry.term, entry.meaningVi, entry.definitionEn, entry.topic, ...entry.collocations, ...entry.synonyms].join(" "),
+        [entry.term, entry.meaningVi, entry.definitionEn, entry.topic, ...entry.collocations, ...entry.synonyms, ...entry.family].join(" "),
       );
+      const matchesAwl = awlFilter === "Tất cả"
+        || (awlFilter === "AWL 570" && entry.awlSublist !== undefined)
+        || (awlFilter === "Ngoài AWL" && entry.awlSublist === undefined)
+        || awlFilter === `Sublist ${entry.awlSublist}`;
       return (
         (!needle || haystack.includes(needle)) &&
         (topic === "Tất cả" || entry.topic === topic) &&
         (kind === "Tất cả" || entry.kind === kind) &&
-        (level === "Tất cả" || entry.level === level)
+        (level === "Tất cả" || entry.level === level) &&
+        matchesAwl
       );
     });
-  }, [query, topic, kind, level]);
+  }, [query, topic, kind, level, awlFilter]);
 
-  const selected = lexicon.find((entry) => entry.id === selectedId) ?? filtered[0] ?? lexicon[0];
+  const selected = filtered.find((entry) => entry.id === selectedId) ?? filtered[0] ?? lexicon[0];
   const masteredPercent = Math.round((mastered.length / lexicon.length) * 100);
   const featured = lexicon.find((entry) => entry.term === "mitigate") ?? lexicon[0];
   const reviewCount = Math.min(mistakes.length, 12);
@@ -438,6 +452,7 @@ export default function LexiconApp() {
     setTopic("Tất cả");
     setKind("Tất cả");
     setLevel("Tất cả");
+    setAwlFilter("Tất cả");
     navigateTo("explore");
   };
 
@@ -557,7 +572,7 @@ export default function LexiconApp() {
           <div className="content-wrap explore-view">
             <section className="learning-hero">
               <div className="hero-copy">
-                <span className="hero-badge"><i /> Kho IELTS đã sẵn sàng</span>
+                <span className="hero-badge"><i /> 570 AWL + từ vựng IELTS theo chủ đề</span>
                 <h1>Biến từ mới thành<br/><em>phản xạ thật.</em></h1>
                 <p>Học nghĩa, nghe phát âm, nối collocation và tự kiểm tra — mỗi ngày một chút, nhớ lâu hơn hẳn.</p>
                 <div className="hero-actions">
@@ -584,7 +599,7 @@ export default function LexiconApp() {
 
             <section className="learning-stats" aria-label="Tiến độ học">
               <article><span className="stat-icon purple">Aa</span><div><strong>{lexiconStats.entries}</strong><small>Từ & cụm IELTS</small></div></article>
-              <article><span className="stat-icon green">⌁</span><div><strong>{lexiconStats.collocations}</strong><small>Collocation có sẵn</small></div></article>
+              <article><span className="stat-icon green">AWL</span><div><strong>{lexiconStats.awlHeadwords}</strong><small>Academic headwords</small></div></article>
               <article><span className="stat-icon orange">✓</span><div><strong>{mastered.length}</strong><small>Đã nắm vững</small></div></article>
               <article><span className="stat-icon coral">↻</span><div><strong>{reviewCount}</strong><small>Cần ôn lại</small></div></article>
             </section>
@@ -607,6 +622,7 @@ export default function LexiconApp() {
                 {query && <button type="button" onClick={() => setQuery("")} aria-label="Xóa tìm kiếm">×</button>}
               </label>
               <div className="filter-row">
+                <label><span>Bộ AWL</span><select value={awlFilter} onChange={(event) => setAwlFilter(event.target.value)}><option>Tất cả</option><option>AWL 570</option>{Array.from({ length: 10 }, (_, index) => <option key={index + 1}>Sublist {index + 1}</option>)}<option>Ngoài AWL</option></select></label>
                 <label><span>Chủ đề</span><select value={topic} onChange={(event) => setTopic(event.target.value)}>{topics.map((item) => <option key={item}>{item}</option>)}</select></label>
                 <label><span>Loại</span><select value={kind} onChange={(event) => setKind(event.target.value)}><option>Tất cả</option><option value="word">Từ đơn</option><option value="phrase">Cụm từ</option><option value="collocation">Collocation</option></select></label>
                 <label><span>Trình độ</span><select value={level} onChange={(event) => setLevel(event.target.value)}><option>Tất cả</option><option>B1</option><option>B2</option><option>C1</option></select></label>
@@ -626,7 +642,7 @@ export default function LexiconApp() {
                       onClick={() => { playSound("tap"); setSelectedId(entry.id); }}
                     >
                       <span className="word-main"><strong>{entry.term}</strong><small>{entry.ipa} · {entry.partOfSpeech}</small></span>
-                      <span className="word-topic">{entry.topic}</span>
+                      <span className="word-topic">{entry.awlSublist ? `AWL · S${entry.awlSublist}` : entry.topic}</span>
                       <span className={`level-tag level-${entry.level.toLowerCase()}`}>{entry.level}</span>
                     </button>
                   ))}
@@ -637,7 +653,7 @@ export default function LexiconApp() {
               <article className="word-detail">
                 <div className="detail-glow" />
                 <div className="detail-topline">
-                  <div className="chip-row"><span>{selected.topic}</span><span>{selected.kind === "word" ? "Từ đơn" : selected.kind === "phrase" ? "Cụm từ" : "Collocation"}</span><span>{selected.level}</span></div>
+                  <div className="chip-row"><span>{selected.topic}</span>{selected.awlSublist && <span>AWL · Sublist {selected.awlSublist}</span>}<span>{selected.kind === "word" ? "Từ đơn" : selected.kind === "phrase" ? "Cụm từ" : "Collocation"}</span><span>{selected.level}</span></div>
                   <div className="detail-actions">
                     <button type="button" className={favorites.includes(selected.id) ? "is-on" : ""} onClick={() => toggleList(selected.id, favorites, setFavorites)} aria-label="Lưu từ">{favorites.includes(selected.id) ? "★" : "☆"}</button>
                     <button type="button" className={mastered.includes(selected.id) ? "mastered" : ""} onClick={() => toggleList(selected.id, mastered, setMastered)}>{mastered.includes(selected.id) ? "✓ Đã thuộc" : "Đánh dấu đã thuộc"}</button>
@@ -666,7 +682,7 @@ export default function LexiconApp() {
 
                 <div className="detail-section">
                   <div className="section-title"><span>01</span><h3>Collocations & cụm đi kèm</h3></div>
-                  <div className="term-cloud green">{selected.collocations.map((item) => <span key={item}>{item}</span>)}</div>
+                  <div className="term-cloud green">{selected.collocations.length ? selected.collocations.map((item) => <span key={item}>{item}</span>) : <small>Chưa có collocation đã kiểm chứng cho mục này.</small>}</div>
                 </div>
 
                 <div className="detail-columns">

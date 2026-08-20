@@ -1,3 +1,5 @@
+import { AWL_HEADWORD_COUNT, awlSourceEntries } from "./awl-data";
+
 export type LexiconKind = "word" | "phrase" | "collocation";
 
 export type WordEntry = {
@@ -16,6 +18,7 @@ export type WordEntry = {
   antonyms: string[];
   family: string[];
   example: string;
+  awlSublist?: number;
 };
 
 const rawLexicon = String.raw`
@@ -143,7 +146,7 @@ double-edged sword|/ˌdʌb.əl.edʒd ˈsɔːd/|idiom|con dao hai lưỡi|Somethi
 const splitList = (value: string) =>
   value === "—" ? [] : value.split(";").map((item) => item.trim()).filter(Boolean);
 
-export const lexicon: WordEntry[] = rawLexicon.split("\n").map((line, index) => {
+const curatedLexicon: WordEntry[] = rawLexicon.split("\n").map((line, index) => {
   const [
     term,
     ipa,
@@ -180,6 +183,40 @@ export const lexicon: WordEntry[] = rawLexicon.split("\n").map((line, index) => 
   };
 });
 
+const awlByTerm = new Map(
+  awlSourceEntries.map((entry) => [entry.term.toLowerCase(), entry]),
+);
+
+const curatedWithAwlTags = curatedLexicon.map((entry) => ({
+  ...entry,
+  awlSublist: awlByTerm.get(entry.term.toLowerCase())?.sublist,
+}));
+
+const curatedTerms = new Set(curatedWithAwlTags.map((entry) => entry.term.toLowerCase()));
+
+const awlSupplement: WordEntry[] = awlSourceEntries
+  .filter((entry) => !curatedTerms.has(entry.term.toLowerCase()))
+  .map((entry) => ({
+    id: `awl-${entry.term.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
+    term: entry.term,
+    ipa: entry.ipa,
+    partOfSpeech: entry.partOfSpeech,
+    meaningVi: entry.meaningVi,
+    definitionEn: entry.definitionEn,
+    topic: "Academic Word List",
+    level: entry.level,
+    kind: "word",
+    stress: entry.stress,
+    collocations: entry.collocations,
+    synonyms: entry.synonyms,
+    antonyms: entry.antonyms,
+    family: entry.family,
+    example: entry.example,
+    awlSublist: entry.sublist,
+  }));
+
+export const lexicon: WordEntry[] = [...curatedWithAwlTags, ...awlSupplement];
+
 export const topics = ["Tất cả", ...Array.from(new Set(lexicon.map((item) => item.topic)))];
 
 export const lexiconStats = {
@@ -187,4 +224,5 @@ export const lexiconStats = {
   collocations: lexicon.reduce((total, item) => total + item.collocations.length, 0),
   synonyms: lexicon.reduce((total, item) => total + item.synonyms.length, 0),
   topics: topics.length - 1,
+  awlHeadwords: AWL_HEADWORD_COUNT,
 };

@@ -28,6 +28,9 @@ export const metadata: Metadata = {
     icon: `${basePath}/favicon.svg`,
     shortcut: `${basePath}/favicon.svg`,
   },
+  other: {
+    "codex-preview": "development",
+  },
 };
 
 export default function RootLayout({
