@@ -1,7 +1,8 @@
 import { AWL_HEADWORD_COUNT, awlSourceEntries } from "./awl-data";
+import { buildTopicExpansion, enrichLearningProfile } from "./lexical-enrichment.js";
 import { READING_VOCABULARY_COUNT, readingVocabularyEntries } from "./reading-vocabulary-data";
 
-export type LexiconKind = "word" | "phrase" | "collocation";
+export type LexiconKind = "word" | "phrase" | "collocation" | "pattern" | "prepositional-phrase";
 
 export type WordEntry = {
   id: string;
@@ -21,6 +22,7 @@ export type WordEntry = {
   example: string;
   awlSublist?: number;
   readingSource?: boolean;
+  patternSource?: string;
 };
 
 export type ReadingVocabularyEntry = WordEntry & { readingSource: true };
@@ -225,7 +227,11 @@ const readingSupplement = readingVocabularyEntries.filter(
   (entry) => !baseTerms.has(entry.term.toLowerCase()),
 );
 
-export const lexicon: WordEntry[] = [...baseLexicon, ...readingSupplement];
+const sourceLexicon: WordEntry[] = [...baseLexicon, ...readingSupplement];
+const enrichedSourceLexicon = sourceLexicon.map((entry) => enrichLearningProfile(entry) as WordEntry);
+const topicExpansion = buildTopicExpansion(enrichedSourceLexicon, 80) as WordEntry[];
+
+export const lexicon: WordEntry[] = [...enrichedSourceLexicon, ...topicExpansion];
 
 export const topics = [
   "Tất cả",
@@ -236,9 +242,13 @@ export const topics = [
 
 export const lexiconStats = {
   entries: lexicon.length,
+  sourceEntries: sourceLexicon.length,
+  patterns: lexicon.filter((item) => item.kind === "pattern").length,
+  prepositionalPhrases: lexicon.filter((item) => item.kind === "prepositional-phrase").length,
   collocations: lexicon.reduce((total, item) => total + item.collocations.length, 0),
   synonyms: lexicon.reduce((total, item) => total + item.synonyms.length, 0),
   topics: topics.length - 1,
+  topicTarget: 80,
   awlHeadwords: AWL_HEADWORD_COUNT,
   readingVocabulary: READING_VOCABULARY_COUNT,
 };

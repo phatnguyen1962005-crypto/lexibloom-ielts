@@ -6,10 +6,11 @@ LexiBloom is a Vietnamese-first vocabulary learning app for IELTS. It treats eve
 
 - The complete Academic Word List: 570 headword families across all 10 frequency sublists
 - 330 additional words and phrases organised into 15 fields represented in IELTS Academic Reading samples
-- Exactly 1,000 unique learning entries after merging the curated set, AWL, and Reading collection
+- 2,231 unique learning entries: 1,000 curated/AWL/Reading source entries plus 1,231 reusable academic and prepositional patterns
+- At least 80 words or phrases in every one of the 21 visible topic collections
 - Vietnamese meaning, English definition, IPA, stress guide, word class, CEFR level, and example
-- Collocations, synonyms, antonyms, and word families
-- Search and filters by collection (IELTS Reading/AWL), AWL sublist, topic, entry type, and level
+- Collocations, synonyms, antonyms, word families, and a visible word-class label for every entry
+- Search and filters by collection (IELTS Reading/AWL), AWL sublist, topic, entry type (including academic patterns and prepositional phrases), and level
 - UK/US browser pronunciation
 - Multiple-choice and typed-answer quizzes for meaning, collocation, synonym, and pronunciation
 - Built-in sound effects for taps, correct answers, mistakes, collection actions, and session completion
@@ -35,7 +36,7 @@ Then open the local URL printed by the development server.
 npm run build
 ```
 
-The curated IELTS dataset is stored in `app/lexicon-data.ts`. The generated AWL dataset is kept separately in `app/awl-data.ts`; the IELTS Reading collection is in `app/reading-vocabulary-data.ts`, with its researched topic selection recorded in `data/reading-vocabulary-seeds.json`. All three collections are merged without duplicate headwords at runtime.
+The curated IELTS dataset is stored in `app/lexicon-data.ts`. The generated AWL dataset is kept separately in `app/awl-data.ts`; the IELTS Reading collection is in `app/reading-vocabulary-data.ts`, with its researched topic selection recorded in `data/reading-vocabulary-seeds.json`. All three collections are merged without duplicate headwords at runtime, enriched with learning profiles, and expanded by `app/lexical-enrichment.js` to guarantee the topic minimum.
 
 ## Vocabulary data sources
 
