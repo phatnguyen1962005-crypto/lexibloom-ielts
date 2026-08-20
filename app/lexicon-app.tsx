@@ -14,6 +14,7 @@ type Question = {
   answer: string;
   acceptedAnswers?: string[];
   options: string[];
+  optionGlosses?: Record<string, string>;
   entry: WordEntry;
 };
 
@@ -77,6 +78,64 @@ const normalise = (value: string) =>
     .replace(/[’']/g, "'")
     .replace(/\s+/g, " ");
 
+type CollocationGap = {
+  answer: string;
+  entry: WordEntry;
+  phrase: string;
+  position: "before" | "after";
+  prompt: string;
+};
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const collocationGaps = (entry: WordEntry): CollocationGap[] => {
+  const termPattern = new RegExp(escapeRegExp(entry.term), "i");
+
+  return entry.collocations.flatMap((phrase) => {
+    const match = phrase.match(termPattern);
+    if (!match || match.index === undefined) return [];
+
+    const before = phrase.slice(0, match.index).trim();
+    const after = phrase.slice(match.index + match[0].length).trim();
+
+    if (before) {
+      return [{
+        answer: before,
+        entry,
+        phrase,
+        position: "before" as const,
+        prompt: `_____ ${entry.term}${after ? ` ${after}` : ""}`,
+      }];
+    }
+
+    if (after) {
+      return [{
+        answer: after,
+        entry,
+        phrase,
+        position: "after" as const,
+        prompt: `${entry.term} _____`,
+      }];
+    }
+
+    return [];
+  });
+};
+
+const collocationGloss = (gap: CollocationGap) => {
+  const directEntry = lexicon.find((item) => normalise(item.term) === normalise(gap.answer));
+  if (directEntry) return directEntry.meaningVi;
+
+  const semanticEntry = lexicon.find((item) =>
+    [...item.synonyms, ...item.antonyms, ...item.family].some(
+      (word) => normalise(word) === normalise(gap.answer),
+    ),
+  );
+  if (semanticEntry) return semanticEntry.meaningVi;
+
+  return `Cụm mẫu: ${gap.phrase} · ${gap.entry.meaningVi}`;
+};
+
 function makeQuestion(focus: QuizFocus, multipleChoice: boolean): Question {
   const entry = sample(lexicon);
   const available: Question["kind"][] = ["meaning", "collocation", "synonym", "pronunciation"];
@@ -85,6 +144,10 @@ function makeQuestion(focus: QuizFocus, multipleChoice: boolean): Question {
   if (kind === "meaning") {
     const reverse = Math.random() > 0.5;
     if (reverse) {
+      const choices = [
+        entry,
+        ...shuffle(lexicon.filter((item) => item.id !== entry.id)).slice(0, 3),
+      ];
       return {
         kind,
         label: "Định nghĩa → từ",
@@ -92,10 +155,8 @@ function makeQuestion(focus: QuizFocus, multipleChoice: boolean): Question {
         helper: `Chủ đề · ${entry.topic}`,
         answer: entry.term,
         entry,
-        options: shuffle([
-          entry.term,
-          ...shuffle(lexicon.filter((item) => item.id !== entry.id)).slice(0, 3).map((item) => item.term),
-        ]),
+        options: shuffle(choices.map((item) => item.term)),
+        optionGlosses: Object.fromEntries(choices.map((item) => [item.term, item.meaningVi])),
       };
     }
 
@@ -114,33 +175,44 @@ function makeQuestion(focus: QuizFocus, multipleChoice: boolean): Question {
   }
 
   if (kind === "collocation") {
-    const collocation = sample(entry.collocations);
-    const escapedTerm = entry.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const canBlank = new RegExp(escapedTerm, "i").test(collocation);
+    const gapPool = lexicon.flatMap(collocationGaps);
+    const entryGaps = collocationGaps(entry);
+    const correctGap = entryGaps.length ? sample(entryGaps) : sample(gapPool);
 
-    if (!multipleChoice && canBlank) {
+    if (!multipleChoice) {
       return {
         kind,
         label: "Hoàn thành collocation",
-        prompt: collocation.replace(new RegExp(escapedTerm, "i"), "________"),
-        helper: entry.meaningVi,
-        answer: entry.term,
-        entry,
+        prompt: correctGap.prompt,
+        helper: correctGap.entry.meaningVi,
+        answer: correctGap.answer,
+        entry: correctGap.entry,
         options: [],
       };
     }
 
+    const distractors = shuffle(
+      gapPool.filter((gap) =>
+        gap.entry.id !== correctGap.entry.id
+        && gap.position === correctGap.position
+        && normalise(gap.answer) !== normalise(correctGap.answer),
+      ),
+    ).filter((gap, index, items) =>
+      items.findIndex((item) => normalise(item.answer) === normalise(gap.answer)) === index,
+    ).slice(0, 3);
+    const choices = [correctGap, ...distractors];
+
     return {
       kind,
-      label: "Chọn cụm tự nhiên",
-      prompt: `Cụm nào đi tự nhiên với “${entry.term}”?`,
-      helper: entry.meaningVi,
-      answer: collocation,
-      entry,
-      options: shuffle([
-        collocation,
-        ...shuffle(lexicon.filter((item) => item.id !== entry.id)).slice(0, 3).map((item) => sample(item.collocations)),
-      ]),
+      label: "Điền từ/cụm còn thiếu",
+      prompt: correctGap.prompt,
+      helper: correctGap.entry.meaningVi,
+      answer: correctGap.answer,
+      entry: correctGap.entry,
+      options: shuffle(choices.map((choice) => choice.answer)),
+      optionGlosses: Object.fromEntries(
+        choices.map((choice) => [choice.answer, collocationGloss(choice)]),
+      ),
     };
   }
 
@@ -149,8 +221,9 @@ function makeQuestion(focus: QuizFocus, multipleChoice: boolean): Question {
     const candidates = shuffle(
       lexicon
         .filter((item) => item.id !== entry.id && item.synonyms.length)
-        .map((item) => item.synonyms[0]),
+        .map((item) => ({ value: item.synonyms[0], gloss: item.meaningVi })),
     ).slice(0, 3);
+    const choices = [{ value: answer, gloss: entry.meaningVi }, ...candidates];
 
     return {
       kind,
@@ -160,9 +233,15 @@ function makeQuestion(focus: QuizFocus, multipleChoice: boolean): Question {
       answer,
       acceptedAnswers: entry.synonyms,
       entry,
-      options: shuffle([answer, ...candidates]),
+      options: shuffle(choices.map((choice) => choice.value)),
+      optionGlosses: Object.fromEntries(choices.map((choice) => [choice.value, choice.gloss])),
     };
   }
+
+  const pronunciationChoices = [
+    entry,
+    ...shuffle(lexicon.filter((item) => item.id !== entry.id)).slice(0, 3),
+  ];
 
   return {
     kind: "pronunciation",
@@ -171,10 +250,10 @@ function makeQuestion(focus: QuizFocus, multipleChoice: boolean): Question {
     helper: `Trọng âm · ${entry.stress}`,
     answer: entry.term,
     entry,
-    options: shuffle([
-      entry.term,
-      ...shuffle(lexicon.filter((item) => item.id !== entry.id)).slice(0, 3).map((item) => item.term),
-    ]),
+    options: shuffle(pronunciationChoices.map((item) => item.term)),
+    optionGlosses: Object.fromEntries(
+      pronunciationChoices.map((item) => [item.term, item.meaningVi]),
+    ),
   };
 }
 
@@ -658,7 +737,13 @@ export default function LexiconApp() {
                           className={answered && optionCorrect ? "correct-option" : answered && optionChosen ? "wrong-option" : ""}
                           onClick={() => submitAnswer(option)}
                         >
-                          <span>{String.fromCharCode(65 + index)}</span>{option}
+                          <span className="answer-letter">{String.fromCharCode(65 + index)}</span>
+                          <span className="answer-copy">
+                            <strong>{option}</strong>
+                            {answered && question.optionGlosses?.[option] && (
+                              <small>{question.optionGlosses[option]}</small>
+                            )}
+                          </span>
                         </button>
                       );
                     })}
