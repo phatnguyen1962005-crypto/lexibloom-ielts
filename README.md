@@ -14,6 +14,8 @@ LexiBloom is a Vietnamese-first vocabulary learning app for IELTS. It treats eve
 - Multiple-choice and typed-answer quizzes for meaning, collocation, synonym, and pronunciation
 - Built-in sound effects for taps, correct answers, mistakes, collection actions, and session completion
 - Daily goals, XP, learning streaks, session results, and animated feedback
+- Device-local spaced retrieval with 1, 3, 7, 14, 30, and 60-day review intervals
+- Persistent daily answer/accuracy tracking and non-repeating words within each quiz session
 - Local favorites, mastery progress, sound preference, and an automatic mistake notebook
 - A repeat-until-correct error loop for reviewing all mistakes, one knowledge type, or one selected question
 - Responsive desktop and mobile layouts

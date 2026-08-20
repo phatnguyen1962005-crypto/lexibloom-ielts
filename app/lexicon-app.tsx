@@ -3,9 +3,17 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { lexicon, lexiconStats, topics, type WordEntry } from "./lexicon-data";
 import { advanceReviewQueue, mistakeSignature, uniqueMistakes } from "./mistake-review.js";
+import {
+  dateKey,
+  dueReviewIds,
+  recordDailyAnswer,
+  scheduleReview,
+  wordOfDayIndex,
+} from "./study-progress.js";
 
 type View = "explore" | "quiz-choice" | "quiz-typing" | "mistakes" | "review-mistakes";
 type QuizFocus = "mixed" | "meaning" | "collocation" | "synonym" | "pronunciation";
+type QuizSource = "all" | "due";
 
 type Question = {
   kind: Exclude<QuizFocus, "mixed">;
@@ -32,6 +40,19 @@ type Mistake = {
   options?: string[];
   optionGlosses?: Record<string, string>;
 };
+
+type DailyProgress = {
+  date: string;
+  answered: number;
+  correct: number;
+};
+
+type ReviewSchedule = Record<string, {
+  correctStreak: number;
+  dueOn: string;
+  intervalDays: number;
+  lastReviewedAt: string;
+}>;
 
 const focusLabels: Record<QuizFocus, string> = {
   mixed: "Trộn kiến thức",
@@ -71,6 +92,12 @@ const topicIcons: Record<string, string> = {
   "Language & Communication": "abc",
   "Government & Law": "§",
 };
+
+const featuredEntries = lexicon.filter((entry) =>
+  entry.collocations.some(Boolean)
+  && entry.synonyms.some(Boolean)
+  && entry.family.some(Boolean),
+);
 
 type SoundKind = "tap" | "correct" | "wrong" | "collect" | "complete";
 
@@ -150,14 +177,19 @@ const collocationGloss = (gap: CollocationGap) => {
   return `Cụm mẫu: ${gap.phrase} · ${gap.entry.meaningVi}`;
 };
 
-function makeQuestion(focus: QuizFocus, multipleChoice: boolean): Question {
+function makeQuestion(focus: QuizFocus, multipleChoice: boolean, sourceEntries: WordEntry[] = lexicon): Question {
   const available: Question["kind"][] = ["meaning", "collocation", "synonym", "pronunciation"];
-  const kind = focus === "mixed" ? sample(available) : focus;
-  const eligibleEntries = kind === "collocation"
-    ? lexicon.filter((item) => collocationGaps(item).length > 0)
+  let kind = focus === "mixed" ? sample(available) : focus;
+  let eligibleEntries = kind === "collocation"
+    ? sourceEntries.filter((item) => collocationGaps(item).length > 0)
     : kind === "synonym"
-      ? lexicon.filter((item) => item.synonyms.length > 0)
-      : lexicon;
+      ? sourceEntries.filter((item) => item.synonyms.length > 0)
+      : sourceEntries;
+
+  if (!eligibleEntries.length) {
+    kind = "meaning";
+    eligibleEntries = sourceEntries.length ? sourceEntries : lexicon;
+  }
   const entry = sample(eligibleEntries);
 
   if (kind === "meaning") {
@@ -376,6 +408,8 @@ export default function LexiconApp() {
   const [reviewComplete, setReviewComplete] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [focus, setFocus] = useState<QuizFocus>("mixed");
+  const [quizSource, setQuizSource] = useState<QuizSource>("all");
+  const [sessionEntries, setSessionEntries] = useState<WordEntry[]>([]);
   const [question, setQuestion] = useState<Question | null>(null);
   const [submitted, setSubmitted] = useState("");
   const [answered, setAnswered] = useState(false);
@@ -387,6 +421,12 @@ export default function LexiconApp() {
   const [xp, setXp] = useState(0);
   const [streak, setStreak] = useState(0);
   const [lastStudyDay, setLastStudyDay] = useState("");
+  const [dailyProgress, setDailyProgress] = useState<DailyProgress>({
+    date: dateKey(),
+    answered: 0,
+    correct: 0,
+  });
+  const [reviewSchedule, setReviewSchedule] = useState<ReviewSchedule>({});
   const audioContextRef = useRef<AudioContext | null>(null);
 
   const playSound = (kind: SoundKind, force = false) => {
@@ -424,13 +464,8 @@ export default function LexiconApp() {
     });
   };
 
-  const todayKey = () => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  };
-
   const markStudyDay = () => {
-    const today = todayKey();
+    const today = dateKey();
     if (lastStudyDay === today) return;
     const yesterdayDate = new Date();
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
@@ -449,6 +484,11 @@ export default function LexiconApp() {
       setXp(Number(localStorage.getItem("ielts-lexicon-xp") ?? 0));
       setStreak(Number(localStorage.getItem("ielts-lexicon-streak") ?? 0));
       setLastStudyDay(localStorage.getItem("ielts-lexicon-last-study") ?? "");
+      const storedDailyProgress = JSON.parse(localStorage.getItem("ielts-lexicon-daily-progress") ?? "null");
+      setDailyProgress(storedDailyProgress?.date === dateKey()
+        ? storedDailyProgress
+        : { date: dateKey(), answered: 0, correct: 0 });
+      setReviewSchedule(JSON.parse(localStorage.getItem("ielts-lexicon-review-schedule") ?? "{}"));
     } catch {
       // A malformed local value should never prevent the dictionary from loading.
     }
@@ -464,20 +504,9 @@ export default function LexiconApp() {
     localStorage.setItem("ielts-lexicon-xp", String(xp));
     localStorage.setItem("ielts-lexicon-streak", String(streak));
     localStorage.setItem("ielts-lexicon-last-study", lastStudyDay);
-  }, [favorites, mastered, mistakes, soundEnabled, xp, streak, lastStudyDay, hydrated]);
-
-  useEffect(() => {
-    if (view === "quiz-choice" || view === "quiz-typing") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- changing quiz mode intentionally starts a fresh session.
-      setQuestion(makeQuestion(focus, view === "quiz-choice"));
-      setSubmitted("");
-      setAnswered(false);
-      setCorrect(false);
-      setScore(0);
-      setQuestionNumber(1);
-      setSessionComplete(false);
-    }
-  }, [view, focus]);
+    localStorage.setItem("ielts-lexicon-daily-progress", JSON.stringify(dailyProgress));
+    localStorage.setItem("ielts-lexicon-review-schedule", JSON.stringify(reviewSchedule));
+  }, [favorites, mastered, mistakes, soundEnabled, xp, streak, lastStudyDay, dailyProgress, reviewSchedule, hydrated]);
 
   const filtered = useMemo(() => {
     const needle = normalise(query);
@@ -502,10 +531,38 @@ export default function LexiconApp() {
 
   const selected = filtered.find((entry) => entry.id === selectedId) ?? filtered[0] ?? lexicon[0];
   const masteredPercent = Math.round((mastered.length / lexicon.length) * 100);
-  const featured = lexicon.find((entry) => entry.term === "mitigate") ?? lexicon[0];
+  const featured = featuredEntries[wordOfDayIndex(featuredEntries.length)] ?? lexicon[0];
   const reviewableMistakes = useMemo(() => uniqueMistakes(mistakes), [mistakes]);
+  const dueIds = useMemo(() => dueReviewIds(reviewSchedule), [reviewSchedule]);
+  const dueEntries = useMemo(() => {
+    const dueSet = new Set(dueIds);
+    return lexicon.filter((entry) => dueSet.has(entry.id));
+  }, [dueIds]);
+  const sessionLength = sessionEntries.length || 10;
+
+  const startQuiz = (nextView: "quiz-choice" | "quiz-typing", source: QuizSource = "all", nextFocus = focus) => {
+    const pool = source === "due" ? dueEntries : lexicon;
+    if (!pool.length) return;
+    const entries = shuffle(pool).slice(0, Math.min(10, pool.length));
+    playSound("tap");
+    setQuizSource(source);
+    setFocus(nextFocus);
+    setSessionEntries(entries);
+    setQuestion(makeQuestion(nextFocus, nextView === "quiz-choice", [entries[0]]));
+    setSubmitted("");
+    setAnswered(false);
+    setCorrect(false);
+    setScore(0);
+    setQuestionNumber(1);
+    setSessionComplete(false);
+    setView(nextView);
+  };
 
   const navigateTo = (nextView: View) => {
+    if (nextView === "quiz-choice" || nextView === "quiz-typing") {
+      startQuiz(nextView);
+      return;
+    }
     playSound("tap");
     setView(nextView);
   };
@@ -539,6 +596,11 @@ export default function LexiconApp() {
     setAnswered(true);
     setCorrect(isCorrect);
     markStudyDay();
+    setDailyProgress((current) => recordDailyAnswer(current, isCorrect));
+    setReviewSchedule((current) => ({
+      ...current,
+      [question.entry.id]: scheduleReview(current[question.entry.id], isCorrect),
+    }));
     if (isCorrect) {
       playSound("correct");
       setScore((value) => value + 1);
@@ -575,28 +637,24 @@ export default function LexiconApp() {
   };
 
   const nextQuestion = () => {
-    if (questionNumber >= 10) {
+    if (questionNumber >= sessionLength) {
       setSessionComplete(true);
       playSound("complete");
       return;
     }
     playSound("tap");
+    const nextEntry = sessionEntries[questionNumber];
     setQuestionNumber((value) => value + 1);
-    setQuestion(makeQuestion(focus, view === "quiz-choice"));
+    setQuestion(makeQuestion(focus, view === "quiz-choice", nextEntry ? [nextEntry] : lexicon));
     setSubmitted("");
     setAnswered(false);
     setCorrect(false);
   };
 
   const restartSession = () => {
-    playSound("tap");
-    setQuestion(makeQuestion(focus, view === "quiz-choice"));
-    setSubmitted("");
-    setAnswered(false);
-    setCorrect(false);
-    setScore(0);
-    setQuestionNumber(1);
-    setSessionComplete(false);
+    if (view === "quiz-choice" || view === "quiz-typing") {
+      startQuiz(view, quizSource === "due" && !dueEntries.length ? "all" : quizSource);
+    }
   };
 
   const startMistakeReview = (source: Mistake[]) => {
@@ -624,6 +682,11 @@ export default function LexiconApp() {
     setReviewAnswered(true);
     setReviewCorrect(isCorrect);
     markStudyDay();
+    setDailyProgress((current) => recordDailyAnswer(current, isCorrect));
+    setReviewSchedule((current) => ({
+      ...current,
+      [reviewQuestion.entry.id]: scheduleReview(current[reviewQuestion.entry.id], isCorrect),
+    }));
     if (isCorrect) {
       playSound("correct");
       setXp((value) => value + 5);
@@ -686,7 +749,7 @@ export default function LexiconApp() {
         </nav>
 
         <div className="daily-goal-card">
-          <div className="goal-ring" style={{ "--goal": `${Math.min(questionNumber * 10, 100)}%` } as React.CSSProperties}><span>{Math.min(questionNumber, 10)}</span><small>/10</small></div>
+          <div className="goal-ring" style={{ "--goal": `${Math.min(dailyProgress.answered * 10, 100)}%` } as React.CSSProperties}><span>{Math.min(dailyProgress.answered, 10)}</span><small>/10</small></div>
           <div><strong>Mục tiêu hôm nay</strong><p>Làm 10 câu để giữ streak.</p><button type="button" onClick={() => navigateTo("quiz-choice")}>Học ngay →</button></div>
         </div>
 
@@ -703,6 +766,7 @@ export default function LexiconApp() {
         <header className="topbar">
           <div className="mobile-brand"><span className="brand-mark"><b>L</b><i>+</i></span><strong>LexiBloom</strong></div>
           <div className="topbar-actions">
+            <span className="metric-pill review-pill"><i>↻</i><strong>{dueEntries.length}</strong><small>đến hạn</small></span>
             <span className="metric-pill streak-pill"><i>🔥</i><strong>{streak}</strong><small>streak</small></span>
             <span className="metric-pill xp-pill"><i>⚡</i><strong>{xp}</strong><small>XP</small></span>
             <button type="button" className={`sound-toggle ${soundEnabled ? "on" : ""}`} onClick={toggleSound} aria-pressed={soundEnabled} aria-label={soundEnabled ? "Tắt âm thanh" : "Bật âm thanh"}>
@@ -746,6 +810,24 @@ export default function LexiconApp() {
               <article><span className="stat-icon green">AWL</span><div><strong>{lexiconStats.awlHeadwords}</strong><small>Academic headwords</small></div></article>
               <article><span className="stat-icon coral">R</span><div><strong>{lexiconStats.readingVocabulary}</strong><small>Theo IELTS Reading</small></div></article>
               <article><span className="stat-icon orange">✓</span><div><strong>{mastered.length}</strong><small>Đã nắm vững</small></div></article>
+            </section>
+
+            <section className={`review-callout ${dueEntries.length ? "has-due" : ""}`} aria-label="Ôn tập giãn cách">
+              <span className="review-callout-icon">↻</span>
+              <div className="review-callout-copy">
+                <span>SPACED RETRIEVAL</span>
+                <h2>{dueEntries.length ? `${dueEntries.length} từ đang đến hạn ôn` : "Lịch ôn thông minh đã sẵn sàng"}</h2>
+                <p>{dueEntries.length
+                  ? "Ôn đúng lúc trước khi quên. Câu đúng sẽ được giãn lịch 1, 3, 7, 14 ngày và lâu hơn."
+                  : "Mỗi câu bạn làm sẽ tự tạo lịch ôn. Câu sai quay lại hôm nay; câu đúng được giãn dần."}</p>
+              </div>
+              <div className="review-callout-stats">
+                <strong>{dailyProgress.answered}</strong><span>câu hôm nay</span>
+                <strong>{dailyProgress.answered ? Math.round((dailyProgress.correct / dailyProgress.answered) * 100) : 0}%</strong><span>chính xác</span>
+              </div>
+              <button type="button" onClick={() => dueEntries.length ? startQuiz("quiz-choice", "due") : startQuiz("quiz-choice", "all")}>
+                {dueEntries.length ? "Ôn ngay" : "Bắt đầu tạo lịch"} <span>→</span>
+              </button>
             </section>
 
             <section className="topic-browser">
@@ -852,12 +934,12 @@ export default function LexiconApp() {
         {(view === "quiz-choice" || view === "quiz-typing") && (
           <div className="content-wrap quiz-view">
             <section className="quiz-heading">
-              <div><span className="mode-orb">{view === "quiz-choice" ? "◆" : "✎"}</span><p className="eyebrow">ACTIVE RECALL</p><h1>{view === "quiz-choice" ? "Trắc nghiệm tăng tốc" : "Tự gõ để nhớ sâu"}</h1><p>{view === "quiz-choice" ? "Chọn nhanh, nhận phản hồi ngay và tích XP." : "Không nhìn đáp án — để não tự kéo từ ra khỏi trí nhớ."}</p></div>
-              <div className="session-score"><span>Phiên học</span><strong>{score}<small>/ {sessionComplete ? 10 : questionNumber}</small></strong><em>+{score * 10} XP</em></div>
+              <div><span className="mode-orb">{quizSource === "due" ? "↻" : view === "quiz-choice" ? "◆" : "✎"}</span><p className="eyebrow">{quizSource === "due" ? "SPACED RETRIEVAL" : "ACTIVE RECALL"}</p><h1>{quizSource === "due" ? "Ôn đúng lúc, nhớ lâu hơn" : view === "quiz-choice" ? "Trắc nghiệm tăng tốc" : "Tự gõ để nhớ sâu"}</h1><p>{quizSource === "due" ? "Chỉ luyện những từ đang đến hạn trong lịch ôn cá nhân của bạn." : view === "quiz-choice" ? "Chọn nhanh, nhận phản hồi ngay và tích XP." : "Không nhìn đáp án — để não tự kéo từ ra khỏi trí nhớ."}</p></div>
+              <div className="session-score"><span>Phiên học</span><strong>{score}<small>/ {sessionComplete ? sessionLength : questionNumber}</small></strong><em>+{score * 10} XP</em></div>
             </section>
 
             <div className="focus-tabs" role="tablist" aria-label="Chọn kiến thức kiểm tra">
-              {(Object.keys(focusLabels) as QuizFocus[]).map((item) => <button type="button" key={item} className={focus === item ? "active" : ""} onClick={() => { playSound("tap"); setFocus(item); }}>{focusLabels[item]}</button>)}
+              {(Object.keys(focusLabels) as QuizFocus[]).map((item) => <button type="button" key={item} className={focus === item ? "active" : ""} onClick={() => startQuiz(view, quizSource, item)}>{focusLabels[item]}</button>)}
             </div>
 
             {sessionComplete ? (
@@ -865,18 +947,18 @@ export default function LexiconApp() {
                 <div className="confetti" aria-hidden="true">{Array.from({ length: 14 }, (_, index) => <i key={index} />)}</div>
                 <div className="result-crown">✦</div>
                 <p>HOÀN THÀNH PHIÊN HỌC</p>
-                <h2>{score >= 8 ? "Quá ổn! Não đang vào guồng." : score >= 5 ? "Tiến bộ rồi, ôn thêm chút nhé." : "Sai để biết chỗ cần nhớ."}</h2>
-                <div className="result-score"><strong>{score}<small>/10</small></strong><span>{score * 10}% chính xác</span></div>
+                <h2>{score / sessionLength >= .8 ? "Quá ổn! Não đang vào guồng." : score / sessionLength >= .5 ? "Tiến bộ rồi, ôn thêm chút nhé." : "Sai để biết chỗ cần nhớ."}</h2>
+                <div className="result-score"><strong>{score}<small>/{sessionLength}</small></strong><span>{Math.round((score / sessionLength) * 100)}% chính xác</span></div>
                 <div className="result-metrics">
                   <article><span>⚡</span><strong>+{score * 10} XP</strong><small>Đã nhận</small></article>
                   <article><span>🔥</span><strong>{streak} ngày</strong><small>Streak hiện tại</small></article>
-                  <article><span>↻</span><strong>{10 - score} từ</strong><small>Cần ôn lại</small></article>
+                  <article><span>↻</span><strong>{sessionLength - score} từ</strong><small>Cần ôn lại</small></article>
                 </div>
-                <div className="result-actions"><button type="button" onClick={restartSession}>Làm thêm 10 câu</button><button type="button" onClick={() => navigateTo("mistakes")}>Xem sổ lỗi</button></div>
+                <div className="result-actions"><button type="button" onClick={restartSession}>{quizSource === "due" && !dueEntries.length ? "Học 10 câu mới" : `Làm thêm ${sessionLength} câu`}</button><button type="button" onClick={() => navigateTo("mistakes")}>Xem sổ lỗi</button></div>
               </section>
             ) : question && (
               <section className={`quiz-card ${answered ? (correct ? "answer-correct" : "answer-wrong") : ""}`}>
-                <div className="quiz-progress"><span>Câu {questionNumber}/10</span><div><i style={{ width: `${questionNumber * 10}%` }} /></div><b>{question.label}</b></div>
+                <div className="quiz-progress"><span>Câu {questionNumber}/{sessionLength}</span><div><i style={{ width: `${(questionNumber / sessionLength) * 100}%` }} /></div><b>{question.label}</b></div>
                 <div className="question-copy">
                   <p>{question.label}</p>
                   <h2>{question.prompt}</h2>
@@ -919,7 +1001,7 @@ export default function LexiconApp() {
                   <div className="answer-feedback">
                     <div className="feedback-icon">{correct ? "✓" : "!"}</div>
                     <div><strong>{correct ? "+10 XP · Chính xác!" : "Chưa đúng — đã lưu vào sổ lỗi."}</strong><p>Đáp án: <b>{question.answer}</b></p><small>{question.entry.example}</small></div>
-                    <button type="button" onClick={nextQuestion}>{questionNumber === 10 ? "Xem kết quả" : "Câu tiếp theo"} →</button>
+                    <button type="button" onClick={nextQuestion}>{questionNumber === sessionLength ? "Xem kết quả" : "Câu tiếp theo"} →</button>
                   </div>
                 )}
               </section>

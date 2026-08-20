@@ -593,6 +593,35 @@ body {
 .learning-stats strong { display: block; font-size: 17px; line-height: 1; }
 .learning-stats small { color: var(--muted); display: block; font-size: 8px; margin-top: 4px; }
 
+.review-callout {
+  align-items: center;
+  background: linear-gradient(120deg, #f8fff4, white);
+  border: 1px solid #d8e9d0;
+  border-radius: 20px;
+  box-shadow: 0 10px 35px rgba(28, 50, 40, .055);
+  display: grid;
+  gap: 18px;
+  grid-template-columns: auto minmax(260px, 1fr) auto auto;
+  margin: -8px 0 26px;
+  padding: 19px 21px;
+}
+.review-callout.has-due { background: linear-gradient(120deg, #173f30, #236146); border-color: #2c7354; color: white; }
+.review-callout-icon { align-items: center; background: var(--lime); border-radius: 14px; color: var(--green); display: flex; font-size: 24px; font-weight: 900; height: 50px; justify-content: center; width: 50px; }
+.review-callout-copy > span { color: var(--green-2); font-size: 8px; font-weight: 900; letter-spacing: .13em; }
+.review-callout.has-due .review-callout-copy > span { color: var(--lime); }
+.review-callout-copy h2 { font-size: 17px; letter-spacing: -.02em; margin: 4px 0 5px; }
+.review-callout-copy p { color: var(--muted); font-size: 10px; line-height: 1.5; margin: 0; max-width: 610px; }
+.review-callout.has-due .review-callout-copy p { color: #c7d9ce; }
+.review-callout-stats { display: grid; gap: 2px 8px; grid-template-columns: auto auto; min-width: 128px; }
+.review-callout-stats strong { font-size: 16px; text-align: right; }
+.review-callout-stats span { align-self: center; color: var(--muted); font-size: 8px; }
+.review-callout.has-due .review-callout-stats span { color: #abc2b5; }
+.review-callout > button { background: var(--green); border: 0; border-radius: 11px; color: white; cursor: pointer; font-size: 9px; font-weight: 850; min-height: 42px; padding: 0 15px; white-space: nowrap; }
+.review-callout.has-due > button { background: var(--lime); color: var(--green); }
+.review-callout > button:hover { transform: translateY(-1px); }
+.review-pill { background: #efffe6; border-color: #d4edc7; color: var(--green); }
+.review-pill i { color: var(--green-2); }
+
 .topic-browser { margin-bottom: 22px; }
 .section-heading { align-items: end; display: flex; justify-content: space-between; margin-bottom: 11px; }
 .section-heading span { color: var(--green-2); font-size: 8px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
@@ -724,6 +753,8 @@ body {
   .main-panel { margin-left: 210px; }
   .learning-hero { grid-template-columns: 1fr .8fr; padding: 34px 30px; }
   .learning-stats { grid-template-columns: 1fr 1fr; }
+  .review-callout { grid-template-columns: auto 1fr auto; }
+  .review-callout-stats { display: none; }
 }
 
 @media (max-width: 820px) {
@@ -747,6 +778,9 @@ body {
   .learning-stats { gap: 8px; }
   .learning-stats article { padding: 11px; }
   .learning-stats small { line-height: 1.25; }
+  .review-callout { align-items: start; gap: 12px; grid-template-columns: auto 1fr; padding: 17px; }
+  .review-callout-icon { height: 42px; width: 42px; }
+  .review-callout > button { grid-column: 1 / -1; width: 100%; }
   .lexicon-grid { display: flex; flex-direction: column; }
   .word-detail { order: -1; }
   .quiz-heading > div:first-child { padding-left: 0; padding-top: 56px; }
