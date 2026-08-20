@@ -153,6 +153,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .word-list { height: 710px; }
 .list-heading { color: #8b928c; display: grid; font-size: 8px; font-weight: 800; grid-template-columns: 1fr 94px; letter-spacing: .12em; padding: 14px 17px 10px; text-transform: uppercase; }
 .list-scroll { border-top: 1px solid #e8e5dc; height: calc(100% - 41px); overflow: auto; padding: 6px; scrollbar-color: #c8ccc5 transparent; scrollbar-width: thin; }
+.load-more-button { background: var(--paper); border: 1px dashed #b9c5bc; border-radius: 10px; color: var(--green-2); cursor: pointer; font-size: 10px; font-weight: 800; margin: 8px 0 4px; padding: 11px; width: 100%; }
+.load-more-button:hover { background: var(--lime-soft); border-color: #9db66d; }
+.load-more-button span { color: var(--muted); font-weight: 600; }
 .word-row { align-items: center; background: transparent; border: 0; border-radius: 10px; cursor: pointer; display: grid; gap: 8px; grid-template-columns: 1fr 96px 32px; padding: 12px 11px; text-align: left; transition: background .12s; width: 100%; }
 .word-row:hover { background: #f5f5ed; }
 .word-row.selected { background: var(--green); color: white; }
@@ -207,9 +210,12 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .detail-columns { display: grid; gap: 20px; grid-template-columns: 1fr 1fr; }
 .family-section { border-top: 1px solid var(--line); padding-top: 18px; }
 .family-flow { align-items: center; display: flex; flex-wrap: wrap; gap: 7px; }
-.family-flow strong { background: var(--green); border-radius: 7px; color: white; font-family: Georgia, serif; font-size: 12px; padding: 7px 10px; }
+.family-flow strong { background: var(--green); border-radius: 7px; color: white; display: grid; font-family: Georgia, serif; font-size: 12px; gap: 2px; padding: 7px 10px; }
 .family-flow b { color: #9ea69e; font-size: 12px; }
-.family-flow span { border: 1px dashed #bfc8bf; border-radius: 7px; color: #4d5c51; font-size: 10px; padding: 6px 8px; }
+.family-flow span { border: 1px dashed #bfc8bf; border-radius: 7px; color: #4d5c51; display: grid; font-size: 10px; gap: 2px; padding: 6px 8px; }
+.family-flow em { font-style: normal; }
+.family-flow small { color: #7a857d; font-family: Inter, sans-serif; font-size: 7px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+.family-flow strong small { color: #c7d8cc; }
 
 .quiz-view, .mistakes-view { max-width: 1120px; padding-top: 56px; }
 .quiz-heading, .mistakes-heading { align-items: end; display: flex; justify-content: space-between; }

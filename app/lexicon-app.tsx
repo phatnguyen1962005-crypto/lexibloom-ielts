@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { lexicon, lexiconStats, topics, type WordEntry } from "./lexicon-data";
+import { inferWordFormType } from "./lexical-enrichment.js";
 import { advanceReviewQueue, mistakeSignature, uniqueMistakes } from "./mistake-review.js";
 import {
   dateKey,
@@ -93,7 +94,17 @@ const topicIcons: Record<string, string> = {
   "Government & Law": "§",
 };
 
+const kindLabels: Record<WordEntry["kind"], string> = {
+  word: "Từ đơn",
+  phrase: "Cụm từ",
+  collocation: "Collocation",
+  pattern: "Academic pattern",
+  "prepositional-phrase": "Cụm giới từ",
+};
+
 const featuredEntries = lexicon.filter((entry) =>
+  !entry.patternSource
+  &&
   entry.collocations.some(Boolean)
   && entry.synonyms.some(Boolean)
   && entry.family.some(Boolean),
@@ -184,7 +195,9 @@ function makeQuestion(focus: QuizFocus, multipleChoice: boolean, sourceEntries: 
     ? sourceEntries.filter((item) => collocationGaps(item).length > 0)
     : kind === "synonym"
       ? sourceEntries.filter((item) => item.synonyms.length > 0)
-      : sourceEntries;
+      : kind === "pronunciation"
+        ? sourceEntries.filter((item) => !item.patternSource)
+        : sourceEntries;
 
   if (!eligibleEntries.length) {
     kind = "meaning";
@@ -394,6 +407,7 @@ export default function LexiconApp() {
   const [kind, setKind] = useState("Tất cả");
   const [level, setLevel] = useState("Tất cả");
   const [collectionFilter, setCollectionFilter] = useState("Tất cả");
+  const [visibleCount, setVisibleCount] = useState(120);
   const [selectedId, setSelectedId] = useState(lexicon[25].id);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [mastered, setMastered] = useState<string[]>([]);
@@ -529,6 +543,7 @@ export default function LexiconApp() {
     });
   }, [query, topic, kind, level, collectionFilter]);
 
+  const visibleEntries = filtered.slice(0, visibleCount);
   const selected = filtered.find((entry) => entry.id === selectedId) ?? filtered[0] ?? lexicon[0];
   const masteredPercent = Math.round((mastered.length / lexicon.length) * 100);
   const featured = featuredEntries[wordOfDayIndex(featuredEntries.length)] ?? lexicon[0];
@@ -780,7 +795,7 @@ export default function LexiconApp() {
           <div className="content-wrap explore-view">
             <section className="learning-hero">
               <div className="hero-copy">
-                <span className="hero-badge"><i /> 1.000 mục · 570 AWL · 330 IELTS Reading</span>
+                <span className="hero-badge"><i /> {lexiconStats.entries.toLocaleString("vi-VN")} mục · 80/chủ đề · {(lexiconStats.patterns + lexiconStats.prepositionalPhrases).toLocaleString("vi-VN")} patterns</span>
                 <h1>Biến từ mới thành<br/><em>phản xạ thật.</em></h1>
                 <p>Học nghĩa, nghe phát âm, nối collocation và tự kiểm tra — mỗi ngày một chút, nhớ lâu hơn hẳn.</p>
                 <div className="hero-actions">
@@ -834,7 +849,7 @@ export default function LexiconApp() {
               <div className="section-heading"><div><span>Học theo chủ đề</span><h2>Chọn một vùng từ vựng</h2></div><small>{lexiconStats.topics} bộ chủ đề</small></div>
               <div className="topic-chips">
                 {topics.slice(1).map((item) => (
-                  <button type="button" key={item} className={topic === item ? "active" : ""} onClick={() => { playSound("tap"); setCollectionFilter("Tất cả"); setTopic(topic === item ? "Tất cả" : item); }}>
+                  <button type="button" key={item} className={topic === item ? "active" : ""} onClick={() => { playSound("tap"); setCollectionFilter("Tất cả"); setTopic(topic === item ? "Tất cả" : item); setVisibleCount(120); }}>
                     <span>{topicIcons[item] ?? "•"}</span><b>{item}</b><small>{lexicon.filter((entry) => entry.topic === item).length}</small>
                   </button>
                 ))}
@@ -844,14 +859,14 @@ export default function LexiconApp() {
             <section className="search-panel" aria-label="Bộ lọc từ vựng">
               <label className="search-box">
                 <span>⌕</span>
-                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm từ, nghĩa, synonym hoặc collocation..." />
-                {query && <button type="button" onClick={() => setQuery("")} aria-label="Xóa tìm kiếm">×</button>}
+                <input value={query} onChange={(event) => { setQuery(event.target.value); setVisibleCount(120); }} placeholder="Tìm từ, nghĩa, synonym, pattern hoặc collocation..." />
+                {query && <button type="button" onClick={() => { setQuery(""); setVisibleCount(120); }} aria-label="Xóa tìm kiếm">×</button>}
               </label>
               <div className="filter-row">
-                <label><span>Bộ từ</span><select value={collectionFilter} onChange={(event) => setCollectionFilter(event.target.value)}><option>Tất cả</option><option>IELTS Reading 330</option><option>AWL 570</option>{Array.from({ length: 10 }, (_, index) => <option key={index + 1}>Sublist {index + 1}</option>)}<option>Ngoài AWL</option></select></label>
-                <label><span>Chủ đề</span><select value={topic} onChange={(event) => setTopic(event.target.value)}>{topics.map((item) => <option key={item}>{item}</option>)}</select></label>
-                <label><span>Loại</span><select value={kind} onChange={(event) => setKind(event.target.value)}><option>Tất cả</option><option value="word">Từ đơn</option><option value="phrase">Cụm từ</option><option value="collocation">Collocation</option></select></label>
-                <label><span>Trình độ</span><select value={level} onChange={(event) => setLevel(event.target.value)}><option>Tất cả</option><option>B1</option><option>B2</option><option>C1</option></select></label>
+                <label><span>Bộ từ</span><select value={collectionFilter} onChange={(event) => { setCollectionFilter(event.target.value); setVisibleCount(120); }}><option>Tất cả</option><option>IELTS Reading 330</option><option>AWL 570</option>{Array.from({ length: 10 }, (_, index) => <option key={index + 1}>Sublist {index + 1}</option>)}<option>Ngoài AWL</option></select></label>
+                <label><span>Chủ đề</span><select value={topic} onChange={(event) => { setTopic(event.target.value); setVisibleCount(120); }}>{topics.map((item) => <option key={item}>{item}</option>)}</select></label>
+                <label><span>Loại</span><select value={kind} onChange={(event) => { setKind(event.target.value); setVisibleCount(120); }}><option>Tất cả</option><option value="word">Từ đơn</option><option value="phrase">Cụm từ</option><option value="collocation">Collocation</option><option value="pattern">Academic pattern</option><option value="prepositional-phrase">Cụm giới từ</option></select></label>
+                <label><span>Trình độ</span><select value={level} onChange={(event) => { setLevel(event.target.value); setVisibleCount(120); }}><option>Tất cả</option><option>B1</option><option>B2</option><option>C1</option></select></label>
                 <span className="result-count">{filtered.length} kết quả</span>
               </div>
             </section>
@@ -860,18 +875,19 @@ export default function LexiconApp() {
               <div className="word-list" aria-label="Danh sách từ">
                 <div className="list-heading"><span>Mục từ</span><span>Chủ đề</span></div>
                 <div className="list-scroll">
-                  {filtered.map((entry) => (
+                  {visibleEntries.map((entry) => (
                     <button
                       type="button"
                       className={`word-row ${selected.id === entry.id ? "selected" : ""}`}
                       key={entry.id}
                       onClick={() => { playSound("tap"); setSelectedId(entry.id); }}
                     >
-                      <span className="word-main"><strong>{entry.term}</strong><small>{entry.ipa} · {entry.partOfSpeech}</small></span>
+                      <span className="word-main"><strong>{entry.term}</strong><small>{entry.patternSource ? `IPA từ trọng tâm ${entry.patternSource}: ${entry.ipa}` : entry.ipa} · {entry.partOfSpeech}</small></span>
                       <span className="word-topic">{entry.readingSource ? `Reading · ${entry.topic}` : entry.awlSublist ? `AWL · S${entry.awlSublist}` : entry.topic}</span>
                       <span className={`level-tag level-${entry.level.toLowerCase()}`}>{entry.level}</span>
                     </button>
                   ))}
+                  {filtered.length > visibleEntries.length && <button type="button" className="load-more-button" onClick={() => setVisibleCount((current) => current + 120)}>Hiện thêm 120 mục <span>({visibleEntries.length}/{filtered.length})</span></button>}
                   {filtered.length === 0 && <div className="empty-state"><strong>Chưa thấy kết quả.</strong><span>Thử tìm bằng từ tiếng Anh, nghĩa tiếng Việt hoặc collocation.</span></div>}
                 </div>
               </div>
@@ -879,7 +895,7 @@ export default function LexiconApp() {
               <article className="word-detail">
                 <div className="detail-glow" />
                 <div className="detail-topline">
-                  <div className="chip-row"><span>{selected.topic}</span>{selected.readingSource && <span>IELTS Reading</span>}{selected.awlSublist && <span>AWL · Sublist {selected.awlSublist}</span>}<span>{selected.kind === "word" ? "Từ đơn" : selected.kind === "phrase" ? "Cụm từ" : "Collocation"}</span><span>{selected.level}</span></div>
+                  <div className="chip-row"><span>{selected.topic}</span>{selected.readingSource && <span>IELTS Reading</span>}{selected.awlSublist && <span>AWL · Sublist {selected.awlSublist}</span>}<span>{kindLabels[selected.kind]}</span><span>{selected.level}</span></div>
                   <div className="detail-actions">
                     <button type="button" className={favorites.includes(selected.id) ? "is-on" : ""} onClick={() => toggleList(selected.id, favorites, setFavorites)} aria-label="Lưu từ">{favorites.includes(selected.id) ? "★" : "☆"}</button>
                     <button type="button" className={mastered.includes(selected.id) ? "mastered" : ""} onClick={() => toggleList(selected.id, mastered, setMastered)}>{mastered.includes(selected.id) ? "✓ Đã thuộc" : "Đánh dấu đã thuộc"}</button>
@@ -889,7 +905,7 @@ export default function LexiconApp() {
                 <div className="headword-block">
                   <p>{selected.partOfSpeech}</p>
                   <h2>{selected.term}</h2>
-                  <div className="pronunciation-line"><code>{selected.ipa}</code><span>•</span><span>{selected.stress}</span><SpeakerButton term={selected.term} /></div>
+                  <div className="pronunciation-line"><code>{selected.ipa}</code><span>•</span><span>{selected.patternSource ? `IPA từ trọng tâm “${selected.patternSource}”` : selected.stress}</span><SpeakerButton term={selected.term} /></div>
                 </div>
 
                 <div className="mini-learning-path" aria-label="Các lớp kiến thức của từ">
@@ -924,7 +940,11 @@ export default function LexiconApp() {
 
                 <div className="detail-section family-section">
                   <div className="section-title"><span>04</span><h3>Word family</h3></div>
-                  <div className="family-flow"><strong>{selected.term}</strong><b>→</b>{selected.family.length ? selected.family.map((item) => <span key={item}>{item}</span>) : <span>Không có biến thể thông dụng</span>}</div>
+                  <div className="family-flow">
+                    <strong><em>{selected.term}</em><small>{selected.partOfSpeech}</small></strong>
+                    <b>→</b>
+                    {selected.family.map((item) => <span key={item}><em>{item}</em><small>{normalise(item) === normalise(selected.term) ? selected.partOfSpeech : inferWordFormType(item)}</small></span>)}
+                  </div>
                 </div>
               </article>
             </section>
