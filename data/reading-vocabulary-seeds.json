@@ -1,0 +1,47 @@
+{
+  "Science & Research": [
+    "radioactivity", "isotope", "radiation", "nucleus", "neutron", "molecule", "catalyst", "laboratory", "apparatus", "specimen", "replication", "peer review", "control group", "fieldwork", "microscopy", "quantify", "calibration", "causal mechanism", "scientific consensus", "reproducibility", "empirical observation", "research protocol"
+  ],
+  "Biology & Evolution": [
+    "ancestry", "organism", "vertebrate", "invertebrate", "fossil", "fossilisation", "palaeontology", "taxonomy", "cladistics", "theropod", "reptile", "mammal", "embryo", "mutation", "genetic variation", "natural selection", "evolutionary lineage", "anatomical feature", "extinction", "species diversity", "predator", "offspring"
+  ],
+  "Health & Ageing": [
+    "longevity", "metabolism", "glucose", "calorie", "nutrient", "cellular", "physiological", "dosage", "geriatric", "dementia", "inflammation", "immunity", "cardiovascular", "life expectancy", "calorie restriction", "ageing process", "insulin resistance", "free radical", "cognitive decline", "dietary intake", "side effect", "clinical trial"
+  ],
+  "Environment": [
+    "ecosystem", "habitat", "deforestation", "desertification", "contamination", "precipitation", "drought", "watershed", "carbon sink", "greenhouse gas", "sea-level rise", "habitat loss", "marine ecosystem", "ecological balance", "conservation area", "endangered species", "fossil fuel", "soil erosion", "air quality", "waste disposal", "water scarcity", "environmental impact"
+  ],
+  "Agriculture & Food": [
+    "pasture", "livestock", "irrigation", "cultivation", "arable", "crop yield", "pollination", "pesticide", "fertiliser", "soil fertility", "drought-resistant", "monoculture", "harvest", "grazing", "manure", "greenhouse cultivation", "food security", "agricultural output", "pest control", "subsistence farming", "crop rotation", "water-intensive"
+  ],
+  "Technology & Engineering": [
+    "propulsion", "combustion", "projectile", "cylinder", "prototype", "robotics", "algorithm", "semiconductor", "telecommunication", "encryption", "data breach", "machine learning", "artificial intelligence", "technological infrastructure", "energy efficiency", "remote sensing", "autonomous vehicle", "digital platform", "information retrieval", "user interface", "cyberattack", "satellite imagery"
+  ],
+  "Cities & Transport": [
+    "gridlock", "traffic flow", "bottleneck", "journey time", "peak-hour traffic", "urban regeneration", "public transit", "rush hour", "road capacity", "vehicle density", "traffic jam", "transport network", "residential area", "urban planning", "city centre", "population density", "traffic density", "green belt", "commuter", "road safety", "mass transit", "land use"
+  ],
+  "Economy & Work": [
+    "workplace hierarchy", "workforce participation", "seniority", "remuneration", "job insecurity", "retirement", "redundancy", "occupational", "labour shortage", "job satisfaction", "career progression", "employee retention", "performance appraisal", "income distribution", "minimum wage", "labour market", "skilled worker", "working conditions", "wage gap", "pension scheme", "employer contribution", "consumer demand"
+  ],
+  "Education": [
+    "pedagogy", "syllabus", "scholarship", "assessment criteria", "academic achievement", "tertiary education", "learning outcome", "critical thinking", "problem-solving skills", "rote learning", "distance learning", "classroom interaction", "teacher training", "educational inequality", "school enrolment", "dropout rate", "practical skills", "language acquisition", "learning difficulty", "standardised test", "student engagement", "higher education"
+  ],
+  "Society & Demographics": [
+    "demographic transition", "population distribution", "ageing population", "birth rate", "social integration", "population growth", "income gap", "household income", "living standard", "social isolation", "community engagement", "public health", "gender equality", "equal opportunity", "social class", "family structure", "population ageing", "rural exodus", "youth unemployment", "quality of life", "social norm", "public attitude"
+  ],
+  "History & Archaeology": [
+    "civilisation", "excavation", "artefact", "chronology", "dynasty", "indigenous", "manuscript", "settlement", "burial", "inscription", "ancient ruins", "archaeological site", "historical record", "heritage conservation", "prehistoric", "medieval", "empire", "colonisation", "migration route", "oral tradition", "carbon dating", "material culture"
+  ],
+  "Language & Communication": [
+    "linguistics", "morphology", "syntax", "semantics", "ambiguity", "jargon", "discourse", "dialect", "bilingualism", "mother tongue", "language barrier", "speech pattern", "grammatical structure", "word formation", "figurative language", "language change", "verbal communication", "written instruction", "plain English", "technical terminology", "contextual meaning", "linguistic diversity"
+  ],
+  "Government & Law": [
+    "litigation", "judiciary", "prosecution", "defendant", "plaintiff", "legislative reform", "statute", "legal framework", "criminal offence", "law enforcement", "civil rights", "court ruling", "legal dispute", "public policy", "regulatory body", "consumer protection", "intellectual property", "data protection", "legal obligation", "judicial system", "freedom of expression", "constitutional right"
+  ],
+  "Media & Culture": [
+    "heritage", "craftsmanship", "editorial policy", "propaganda", "broadcasting", "journalism", "readership", "audience", "documentary", "mass media", "news coverage", "public opinion", "cultural identity", "traditional values", "cultural exchange", "artistic expression", "media literacy", "digital content", "advertising campaign", "press freedom", "cultural preservation", "popular culture"
+  ],
+  "Data & Trends": [
+    "correlation", "causation", "dataset", "outlier", "median", "percentile", "standard deviation", "percentage change", "fluctuation", "trajectory", "projection", "sample size", "statistical evidence", "data collection", "survey response", "research finding", "upward trajectory", "downward trend", "gradual decline", "sharp increase", "remain constant", "reach a peak"
+  ]
+}

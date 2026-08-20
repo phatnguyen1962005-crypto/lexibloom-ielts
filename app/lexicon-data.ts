@@ -1,4 +1,5 @@
 import { AWL_HEADWORD_COUNT, awlSourceEntries } from "./awl-data";
+import { READING_VOCABULARY_COUNT, readingVocabularyEntries } from "./reading-vocabulary-data";
 
 export type LexiconKind = "word" | "phrase" | "collocation";
 
@@ -19,7 +20,10 @@ export type WordEntry = {
   family: string[];
   example: string;
   awlSublist?: number;
+  readingSource?: boolean;
 };
+
+export type ReadingVocabularyEntry = WordEntry & { readingSource: true };
 
 const rawLexicon = String.raw`
 allocate|/ˈæl.ə.keɪt/|verb|phân bổ|To distribute resources for a particular purpose.|Academic Core|C1|word|AL-lo-cate|allocate resources;allocate funding;allocate time|assign;distribute|withhold|allocation;allocated|Governments should allocate more funding to public education.
@@ -215,9 +219,20 @@ const awlSupplement: WordEntry[] = awlSourceEntries
     awlSublist: entry.sublist,
   }));
 
-export const lexicon: WordEntry[] = [...curatedWithAwlTags, ...awlSupplement];
+const baseLexicon: WordEntry[] = [...curatedWithAwlTags, ...awlSupplement];
+const baseTerms = new Set(baseLexicon.map((entry) => entry.term.toLowerCase()));
+const readingSupplement = readingVocabularyEntries.filter(
+  (entry) => !baseTerms.has(entry.term.toLowerCase()),
+);
 
-export const topics = ["Tất cả", ...Array.from(new Set(lexicon.map((item) => item.topic)))];
+export const lexicon: WordEntry[] = [...baseLexicon, ...readingSupplement];
+
+export const topics = [
+  "Tất cả",
+  ...Array.from(new Set(lexicon
+    .filter((item) => item.topic !== "Academic Word List")
+    .map((item) => item.topic))),
+];
 
 export const lexiconStats = {
   entries: lexicon.length,
@@ -225,4 +240,5 @@ export const lexiconStats = {
   synonyms: lexicon.reduce((total, item) => total + item.synonyms.length, 0),
   topics: topics.length - 1,
   awlHeadwords: AWL_HEADWORD_COUNT,
+  readingVocabulary: READING_VOCABULARY_COUNT,
 };

@@ -5,15 +5,17 @@ LexiBloom is a Vietnamese-first vocabulary learning app for IELTS. It treats eve
 ## Included
 
 - The complete Academic Word List: 570 headword families across all 10 frequency sublists
-- Curated academic words, IELTS phrases, and collocations across 12 topic groups
+- 330 additional words and phrases organised into 15 fields represented in IELTS Academic Reading samples
+- Exactly 1,000 unique learning entries after merging the curated set, AWL, and Reading collection
 - Vietnamese meaning, English definition, IPA, stress guide, word class, CEFR level, and example
 - Collocations, synonyms, antonyms, and word families
-- Search and filters by AWL collection/sublist, topic, entry type, and level
+- Search and filters by collection (IELTS Reading/AWL), AWL sublist, topic, entry type, and level
 - UK/US browser pronunciation
 - Multiple-choice and typed-answer quizzes for meaning, collocation, synonym, and pronunciation
 - Built-in sound effects for taps, correct answers, mistakes, collection actions, and session completion
 - Daily goals, XP, learning streaks, session results, and animated feedback
 - Local favorites, mastery progress, sound preference, and an automatic mistake notebook
+- A repeat-until-correct error loop for reviewing all mistakes, one knowledge type, or one selected question
 - Responsive desktop and mobile layouts
 
 ## Run locally
@@ -31,13 +33,21 @@ Then open the local URL printed by the development server.
 npm run build
 ```
 
-The curated IELTS dataset is stored in `app/lexicon-data.ts`. The generated AWL dataset is kept separately in `app/awl-data.ts`, then merged without duplicate headwords at runtime.
+The curated IELTS dataset is stored in `app/lexicon-data.ts`. The generated AWL dataset is kept separately in `app/awl-data.ts`; the IELTS Reading collection is in `app/reading-vocabulary-data.ts`, with its researched topic selection recorded in `data/reading-vocabulary-seeds.json`. All three collections are merged without duplicate headwords at runtime.
 
 ## Vocabulary data sources
 
 - AWL headwords, word families, and sublists are adapted from `lpmi-13/machine_readable_wordlists` (CC0), based on Averil Coxhead's Academic Word List.
 - English lexical fields in the generated AWL dataset are adapted from English Wiktionary (CC BY-SA 3.0 / GFDL) through Compact Dictionaries.
+- The Reading collection is organised from fields represented in official IELTS Academic Reading sample passages, including science, evolution, health, transport, history, language, law, environment, and agriculture.
+- Definitions for the Reading collection combine English Wiktionary lexical data with short topic definitions and selected Wikipedia introductions (CC BY-SA).
 - Vietnamese glosses are included as short educational translations and should be interpreted in the context of each English definition.
+
+Reading-topic references:
+
+- [Official IELTS Academic Reading sample tasks (PDF)](https://ielts.org/cdn/Sample-tests/ielts-academic-reading-sample-tasks-2023.pdf)
+- [Official IELTS Academic Reading format](https://ielts.org/take-a-test/test-types/ielts-academic-test/ielts-academic-format-reading)
+- [British Council Academic Reading practice](https://takeielts.britishcouncil.org/prepare/ielts-free-practice-mock-tests/academic/reading)
 
 ## GitHub Pages
 

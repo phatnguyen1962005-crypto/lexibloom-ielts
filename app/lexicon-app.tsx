@@ -2,8 +2,9 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { lexicon, lexiconStats, topics, type WordEntry } from "./lexicon-data";
+import { advanceReviewQueue, mistakeSignature, uniqueMistakes } from "./mistake-review.js";
 
-type View = "explore" | "quiz-choice" | "quiz-typing" | "mistakes";
+type View = "explore" | "quiz-choice" | "quiz-typing" | "mistakes" | "review-mistakes";
 type QuizFocus = "mixed" | "meaning" | "collocation" | "synonym" | "pronunciation";
 
 type Question = {
@@ -26,6 +27,10 @@ type Mistake = {
   submitted: string;
   answer: string;
   createdAt: string;
+  helper?: string;
+  acceptedAnswers?: string[];
+  options?: string[];
+  optionGlosses?: Record<string, string>;
 };
 
 const focusLabels: Record<QuizFocus, string> = {
@@ -57,6 +62,14 @@ const topicIcons: Record<string, string> = {
   "Data & Trends": "⌁",
   "High-value Language": "★",
   "Academic Word List": "AWL",
+  "Science & Research": "⚗",
+  "Biology & Evolution": "DNA",
+  "Agriculture & Food": "♧",
+  "Technology & Engineering": "⚙",
+  "Society & Demographics": "◌",
+  "History & Archaeology": "⌛",
+  "Language & Communication": "abc",
+  "Government & Law": "§",
 };
 
 type SoundKind = "tap" | "correct" | "wrong" | "collect" | "complete";
@@ -263,6 +276,59 @@ function makeQuestion(focus: QuizFocus, multipleChoice: boolean): Question {
   };
 }
 
+const reviewOptionGloss = (value: string) => {
+  const entry = lexicon.find((item) =>
+    normalise(item.term) === normalise(value)
+    || normalise(item.meaningVi) === normalise(value)
+    || item.synonyms.some((synonym) => normalise(synonym) === normalise(value)),
+  );
+  if (!entry) return undefined;
+  return normalise(entry.meaningVi) === normalise(value) ? entry.term : entry.meaningVi;
+};
+
+function makeMistakeQuestion(mistake: Mistake): Question | null {
+  const entry = lexicon.find((item) => item.id === mistake.entryId);
+  if (!entry) return null;
+
+  const fallbackOptions = mistake.kind === "meaning"
+    ? normalise(mistake.answer) === normalise(entry.term)
+      ? lexicon.map((item) => item.term)
+      : lexicon.map((item) => item.meaningVi)
+    : mistake.kind === "synonym"
+      ? lexicon.flatMap((item) => item.synonyms.slice(0, 1))
+      : mistake.kind === "collocation"
+        ? lexicon.flatMap(collocationGaps).map((gap) => gap.answer)
+        : lexicon.map((item) => item.term);
+
+  const candidateOptions = [
+    mistake.answer,
+    ...(mistake.options ?? []),
+    ...shuffle(fallbackOptions),
+  ].filter((option, index, options) =>
+    option.trim()
+    && options.findIndex((item) => normalise(item) === normalise(option)) === index,
+  ).slice(0, 4);
+  const options = shuffle(candidateOptions);
+  const generatedGlosses = Object.fromEntries(
+    options.flatMap((option) => {
+      const gloss = reviewOptionGloss(option);
+      return gloss ? [[option, gloss]] : [];
+    }),
+  );
+
+  return {
+    kind: mistake.kind,
+    label: focusLabels[mistake.kind],
+    prompt: mistake.prompt,
+    helper: mistake.helper ?? `${entry.meaningVi} · ${entry.topic}`,
+    answer: mistake.answer,
+    acceptedAnswers: mistake.acceptedAnswers,
+    options,
+    optionGlosses: { ...generatedGlosses, ...mistake.optionGlosses },
+    entry,
+  };
+}
+
 function SpeakerButton({ term, compact = false }: { term: string; compact?: boolean }) {
   const speak = (accent: "en-GB" | "en-US") => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -295,11 +361,19 @@ export default function LexiconApp() {
   const [topic, setTopic] = useState("Tất cả");
   const [kind, setKind] = useState("Tất cả");
   const [level, setLevel] = useState("Tất cả");
-  const [awlFilter, setAwlFilter] = useState("Tất cả");
+  const [collectionFilter, setCollectionFilter] = useState("Tất cả");
   const [selectedId, setSelectedId] = useState(lexicon[25].id);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [mastered, setMastered] = useState<string[]>([]);
   const [mistakes, setMistakes] = useState<Mistake[]>([]);
+  const [reviewQueue, setReviewQueue] = useState<Mistake[]>([]);
+  const [reviewQuestion, setReviewQuestion] = useState<Question | null>(null);
+  const [reviewSubmitted, setReviewSubmitted] = useState("");
+  const [reviewAnswered, setReviewAnswered] = useState(false);
+  const [reviewCorrect, setReviewCorrect] = useState(false);
+  const [reviewInitialCount, setReviewInitialCount] = useState(0);
+  const [reviewResolved, setReviewResolved] = useState(0);
+  const [reviewComplete, setReviewComplete] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [focus, setFocus] = useState<QuizFocus>("mixed");
   const [question, setQuestion] = useState<Question | null>(null);
@@ -370,7 +444,7 @@ export default function LexiconApp() {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate browser-only progress after mount.
       setFavorites(JSON.parse(localStorage.getItem("ielts-lexicon-favorites") ?? "[]"));
       setMastered(JSON.parse(localStorage.getItem("ielts-lexicon-mastered") ?? "[]"));
-      setMistakes(JSON.parse(localStorage.getItem("ielts-lexicon-mistakes") ?? "[]"));
+      setMistakes(uniqueMistakes(JSON.parse(localStorage.getItem("ielts-lexicon-mistakes") ?? "[]")));
       setSoundEnabled(JSON.parse(localStorage.getItem("ielts-lexicon-sound") ?? "true"));
       setXp(Number(localStorage.getItem("ielts-lexicon-xp") ?? 0));
       setStreak(Number(localStorage.getItem("ielts-lexicon-streak") ?? 0));
@@ -411,24 +485,25 @@ export default function LexiconApp() {
       const haystack = normalise(
         [entry.term, entry.meaningVi, entry.definitionEn, entry.topic, ...entry.collocations, ...entry.synonyms, ...entry.family].join(" "),
       );
-      const matchesAwl = awlFilter === "Tất cả"
-        || (awlFilter === "AWL 570" && entry.awlSublist !== undefined)
-        || (awlFilter === "Ngoài AWL" && entry.awlSublist === undefined)
-        || awlFilter === `Sublist ${entry.awlSublist}`;
+      const matchesCollection = collectionFilter === "Tất cả"
+        || (collectionFilter === "IELTS Reading 330" && entry.readingSource)
+        || (collectionFilter === "AWL 570" && entry.awlSublist !== undefined)
+        || (collectionFilter === "Ngoài AWL" && entry.awlSublist === undefined)
+        || collectionFilter === `Sublist ${entry.awlSublist}`;
       return (
         (!needle || haystack.includes(needle)) &&
         (topic === "Tất cả" || entry.topic === topic) &&
         (kind === "Tất cả" || entry.kind === kind) &&
         (level === "Tất cả" || entry.level === level) &&
-        matchesAwl
+        matchesCollection
       );
     });
-  }, [query, topic, kind, level, awlFilter]);
+  }, [query, topic, kind, level, collectionFilter]);
 
   const selected = filtered.find((entry) => entry.id === selectedId) ?? filtered[0] ?? lexicon[0];
   const masteredPercent = Math.round((mastered.length / lexicon.length) * 100);
   const featured = lexicon.find((entry) => entry.term === "mitigate") ?? lexicon[0];
-  const reviewCount = Math.min(mistakes.length, 12);
+  const reviewableMistakes = useMemo(() => uniqueMistakes(mistakes), [mistakes]);
 
   const navigateTo = (nextView: View) => {
     playSound("tap");
@@ -452,7 +527,7 @@ export default function LexiconApp() {
     setTopic("Tất cả");
     setKind("Tất cả");
     setLevel("Tất cả");
-    setAwlFilter("Tất cả");
+    setCollectionFilter("Tất cả");
     navigateTo("explore");
   };
 
@@ -473,8 +548,8 @@ export default function LexiconApp() {
 
     playSound("wrong");
 
-    setMistakes((current) => [
-      {
+    setMistakes((current) => {
+      const mistake: Mistake = {
         id: `${Date.now()}-${question.entry.id}`,
         entryId: question.entry.id,
         kind: question.kind,
@@ -482,9 +557,16 @@ export default function LexiconApp() {
         submitted: answer,
         answer: question.answer,
         createdAt: new Date().toISOString(),
-      },
-      ...current,
-    ].slice(0, 100));
+        helper: question.helper,
+        acceptedAnswers: question.acceptedAnswers,
+        options: question.options,
+        optionGlosses: question.optionGlosses,
+      };
+      return [
+        mistake,
+        ...current.filter((item) => mistakeSignature(item) !== mistakeSignature(mistake)),
+      ].slice(0, 100);
+    });
   };
 
   const submitTyped = (event: FormEvent<HTMLFormElement>) => {
@@ -517,6 +599,68 @@ export default function LexiconApp() {
     setSessionComplete(false);
   };
 
+  const startMistakeReview = (source: Mistake[]) => {
+    const queue = shuffle(uniqueMistakes(source)).filter((mistake) =>
+      lexicon.some((entry) => entry.id === mistake.entryId),
+    );
+    if (!queue.length) return;
+    playSound("tap");
+    setReviewQueue(queue);
+    setReviewQuestion(makeMistakeQuestion(queue[0]));
+    setReviewSubmitted("");
+    setReviewAnswered(false);
+    setReviewCorrect(false);
+    setReviewInitialCount(queue.length);
+    setReviewResolved(0);
+    setReviewComplete(false);
+    setView("review-mistakes");
+  };
+
+  const submitReviewAnswer = (answer: string) => {
+    if (!reviewQuestion || reviewAnswered || !answer.trim()) return;
+    const acceptedAnswers = reviewQuestion.acceptedAnswers ?? [reviewQuestion.answer];
+    const isCorrect = acceptedAnswers.some((item) => normalise(answer) === normalise(item));
+    setReviewSubmitted(answer);
+    setReviewAnswered(true);
+    setReviewCorrect(isCorrect);
+    markStudyDay();
+    if (isCorrect) {
+      playSound("correct");
+      setXp((value) => value + 5);
+    } else {
+      playSound("wrong");
+    }
+  };
+
+  const nextReviewQuestion = () => {
+    const currentMistake = reviewQueue[0];
+    if (!currentMistake) return;
+    const nextQueue = advanceReviewQueue(reviewQueue, reviewCorrect);
+
+    if (reviewCorrect) {
+      const resolvedSignature = mistakeSignature(currentMistake);
+      setMistakes((current) => current.filter(
+        (mistake) => mistakeSignature(mistake) !== resolvedSignature,
+      ));
+      setReviewResolved((value) => value + 1);
+    }
+
+    if (!nextQueue.length) {
+      setReviewQueue([]);
+      setReviewQuestion(null);
+      setReviewComplete(true);
+      playSound("complete");
+      return;
+    }
+
+    playSound("tap");
+    setReviewQueue(nextQueue);
+    setReviewQuestion(makeMistakeQuestion(nextQueue[0]));
+    setReviewSubmitted("");
+    setReviewAnswered(false);
+    setReviewCorrect(false);
+  };
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -531,7 +675,7 @@ export default function LexiconApp() {
             <button
               type="button"
               key={item.id}
-              className={view === item.id ? "active" : ""}
+              className={view === item.id || (view === "review-mistakes" && item.id === "mistakes") ? "active" : ""}
               onClick={() => navigateTo(item.id)}
             >
               <span className="nav-icon" aria-hidden="true">{item.icon}</span>
@@ -572,7 +716,7 @@ export default function LexiconApp() {
           <div className="content-wrap explore-view">
             <section className="learning-hero">
               <div className="hero-copy">
-                <span className="hero-badge"><i /> 570 AWL + từ vựng IELTS theo chủ đề</span>
+                <span className="hero-badge"><i /> 1.000 mục · 570 AWL · 330 IELTS Reading</span>
                 <h1>Biến từ mới thành<br/><em>phản xạ thật.</em></h1>
                 <p>Học nghĩa, nghe phát âm, nối collocation và tự kiểm tra — mỗi ngày một chút, nhớ lâu hơn hẳn.</p>
                 <div className="hero-actions">
@@ -598,17 +742,17 @@ export default function LexiconApp() {
             </section>
 
             <section className="learning-stats" aria-label="Tiến độ học">
-              <article><span className="stat-icon purple">Aa</span><div><strong>{lexiconStats.entries}</strong><small>Từ & cụm IELTS</small></div></article>
+              <article><span className="stat-icon purple">Aa</span><div><strong>{lexiconStats.entries.toLocaleString("vi-VN")}</strong><small>Từ & cụm IELTS</small></div></article>
               <article><span className="stat-icon green">AWL</span><div><strong>{lexiconStats.awlHeadwords}</strong><small>Academic headwords</small></div></article>
+              <article><span className="stat-icon coral">R</span><div><strong>{lexiconStats.readingVocabulary}</strong><small>Theo IELTS Reading</small></div></article>
               <article><span className="stat-icon orange">✓</span><div><strong>{mastered.length}</strong><small>Đã nắm vững</small></div></article>
-              <article><span className="stat-icon coral">↻</span><div><strong>{reviewCount}</strong><small>Cần ôn lại</small></div></article>
             </section>
 
             <section className="topic-browser">
               <div className="section-heading"><div><span>Học theo chủ đề</span><h2>Chọn một vùng từ vựng</h2></div><small>{lexiconStats.topics} bộ chủ đề</small></div>
               <div className="topic-chips">
                 {topics.slice(1).map((item) => (
-                  <button type="button" key={item} className={topic === item ? "active" : ""} onClick={() => { playSound("tap"); setTopic(topic === item ? "Tất cả" : item); }}>
+                  <button type="button" key={item} className={topic === item ? "active" : ""} onClick={() => { playSound("tap"); setCollectionFilter("Tất cả"); setTopic(topic === item ? "Tất cả" : item); }}>
                     <span>{topicIcons[item] ?? "•"}</span><b>{item}</b><small>{lexicon.filter((entry) => entry.topic === item).length}</small>
                   </button>
                 ))}
@@ -622,7 +766,7 @@ export default function LexiconApp() {
                 {query && <button type="button" onClick={() => setQuery("")} aria-label="Xóa tìm kiếm">×</button>}
               </label>
               <div className="filter-row">
-                <label><span>Bộ AWL</span><select value={awlFilter} onChange={(event) => setAwlFilter(event.target.value)}><option>Tất cả</option><option>AWL 570</option>{Array.from({ length: 10 }, (_, index) => <option key={index + 1}>Sublist {index + 1}</option>)}<option>Ngoài AWL</option></select></label>
+                <label><span>Bộ từ</span><select value={collectionFilter} onChange={(event) => setCollectionFilter(event.target.value)}><option>Tất cả</option><option>IELTS Reading 330</option><option>AWL 570</option>{Array.from({ length: 10 }, (_, index) => <option key={index + 1}>Sublist {index + 1}</option>)}<option>Ngoài AWL</option></select></label>
                 <label><span>Chủ đề</span><select value={topic} onChange={(event) => setTopic(event.target.value)}>{topics.map((item) => <option key={item}>{item}</option>)}</select></label>
                 <label><span>Loại</span><select value={kind} onChange={(event) => setKind(event.target.value)}><option>Tất cả</option><option value="word">Từ đơn</option><option value="phrase">Cụm từ</option><option value="collocation">Collocation</option></select></label>
                 <label><span>Trình độ</span><select value={level} onChange={(event) => setLevel(event.target.value)}><option>Tất cả</option><option>B1</option><option>B2</option><option>C1</option></select></label>
@@ -642,7 +786,7 @@ export default function LexiconApp() {
                       onClick={() => { playSound("tap"); setSelectedId(entry.id); }}
                     >
                       <span className="word-main"><strong>{entry.term}</strong><small>{entry.ipa} · {entry.partOfSpeech}</small></span>
-                      <span className="word-topic">{entry.awlSublist ? `AWL · S${entry.awlSublist}` : entry.topic}</span>
+                      <span className="word-topic">{entry.readingSource ? `Reading · ${entry.topic}` : entry.awlSublist ? `AWL · S${entry.awlSublist}` : entry.topic}</span>
                       <span className={`level-tag level-${entry.level.toLowerCase()}`}>{entry.level}</span>
                     </button>
                   ))}
@@ -653,7 +797,7 @@ export default function LexiconApp() {
               <article className="word-detail">
                 <div className="detail-glow" />
                 <div className="detail-topline">
-                  <div className="chip-row"><span>{selected.topic}</span>{selected.awlSublist && <span>AWL · Sublist {selected.awlSublist}</span>}<span>{selected.kind === "word" ? "Từ đơn" : selected.kind === "phrase" ? "Cụm từ" : "Collocation"}</span><span>{selected.level}</span></div>
+                  <div className="chip-row"><span>{selected.topic}</span>{selected.readingSource && <span>IELTS Reading</span>}{selected.awlSublist && <span>AWL · Sublist {selected.awlSublist}</span>}<span>{selected.kind === "word" ? "Từ đơn" : selected.kind === "phrase" ? "Cụm từ" : "Collocation"}</span><span>{selected.level}</span></div>
                   <div className="detail-actions">
                     <button type="button" className={favorites.includes(selected.id) ? "is-on" : ""} onClick={() => toggleList(selected.id, favorites, setFavorites)} aria-label="Lưu từ">{favorites.includes(selected.id) ? "★" : "☆"}</button>
                     <button type="button" className={mastered.includes(selected.id) ? "mastered" : ""} onClick={() => toggleList(selected.id, mastered, setMastered)}>{mastered.includes(selected.id) ? "✓ Đã thuộc" : "Đánh dấu đã thuộc"}</button>
@@ -785,17 +929,85 @@ export default function LexiconApp() {
           </div>
         )}
 
+        {view === "review-mistakes" && (
+          <div className="content-wrap quiz-view review-view">
+            <section className="quiz-heading review-heading">
+              <div><span className="mode-orb">↻</span><p className="eyebrow">ERROR MASTERY LOOP</p><h1>Làm lại câu sai</h1><p>Trả lời đúng để gỡ câu khỏi sổ lỗi. Nếu vẫn sai, câu đó sẽ xuống cuối hàng đợi và quay lại.</p></div>
+              <div className="session-score"><span>Đã sửa</span><strong>{reviewComplete ? reviewInitialCount : reviewResolved}<small>/ {reviewInitialCount}</small></strong><em>+{reviewResolved * 5} XP</em></div>
+            </section>
+
+            {reviewComplete ? (
+              <section className="result-card review-result">
+                <div className="confetti" aria-hidden="true">{Array.from({ length: 14 }, (_, index) => <i key={index} />)}</div>
+                <div className="result-crown">✓</div>
+                <p>ĐÃ KHÉP VÒNG SỬA LỖI</p>
+                <h2>Không còn câu nào bị bỏ lại.</h2>
+                <div className="result-score"><strong>{reviewInitialCount}<small>/{reviewInitialCount}</small></strong><span>đã trả lời đúng</span></div>
+                <div className="result-metrics">
+                  <article><span>⚡</span><strong>+{reviewInitialCount * 5} XP</strong><small>Điểm sửa lỗi</small></article>
+                  <article><span>✓</span><strong>0 câu</strong><small>Còn trong vòng</small></article>
+                  <article><span>↻</span><strong>100%</strong><small>Đã xử lý</small></article>
+                </div>
+                <div className="result-actions"><button type="button" onClick={() => navigateTo("mistakes")}>Về sổ lỗi</button><button type="button" onClick={() => navigateTo("quiz-choice")}>Học 10 câu mới</button></div>
+              </section>
+            ) : reviewQuestion && (
+              <section className={`quiz-card review-card ${reviewAnswered ? (reviewCorrect ? "answer-correct" : "answer-wrong") : ""}`}>
+                <div className="quiz-progress"><span>Còn {reviewQueue.length}</span><div><i style={{ width: `${reviewInitialCount ? (reviewResolved / reviewInitialCount) * 100 : 0}%` }} /></div><b>{reviewQuestion.label}</b></div>
+                <div className="question-copy">
+                  <p>{reviewQuestion.label}</p>
+                  <h2>{reviewQuestion.prompt}</h2>
+                  {reviewQuestion.helper && <span>{reviewQuestion.helper}</span>}
+                  {reviewQuestion.kind === "pronunciation" && <SpeakerButton term={reviewQuestion.entry.term} />}
+                </div>
+
+                <div className="answer-grid">
+                  {reviewQuestion.options.map((option, index) => {
+                    const optionCorrect = normalise(option) === normalise(reviewQuestion.answer);
+                    const optionChosen = normalise(option) === normalise(reviewSubmitted);
+                    return (
+                      <button
+                        type="button"
+                        key={`${option}-${index}`}
+                        disabled={reviewAnswered}
+                        className={reviewAnswered && optionCorrect ? "correct-option" : reviewAnswered && optionChosen ? "wrong-option" : ""}
+                        onClick={() => submitReviewAnswer(option)}
+                      >
+                        <span className="answer-letter">{String.fromCharCode(65 + index)}</span>
+                        <span className="answer-copy">
+                          <strong>{option}</strong>
+                          {reviewAnswered && reviewQuestion.optionGlosses?.[option] && <small>{reviewQuestion.optionGlosses[option]}</small>}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {reviewAnswered && (
+                  <div className="answer-feedback">
+                    <div className="feedback-icon">{reviewCorrect ? "✓" : "!"}</div>
+                    <div><strong>{reviewCorrect ? "+5 XP · Đã sửa được lỗi này!" : "Chưa đúng — câu này sẽ quay lại cuối vòng."}</strong><p>Đáp án: <b>{reviewQuestion.answer}</b></p><small>{reviewQuestion.entry.example}</small></div>
+                    <button type="button" onClick={nextReviewQuestion}>{reviewCorrect && reviewQueue.length === 1 ? "Hoàn tất" : reviewCorrect ? "Câu tiếp theo" : "Gặp lại sau"} →</button>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {!reviewComplete && <section className="quiz-footnote review-footnote"><strong>Quy tắc của vòng sửa lỗi</strong><p>Một câu chỉ biến mất khỏi Sổ lỗi sau khi bạn tự trả lời đúng.</p></section>}
+          </div>
+        )}
+
         {view === "mistakes" && (
           <div className="content-wrap mistakes-view">
             <section className="mistakes-heading">
               <div><p className="eyebrow">PERSONAL ERROR BANK</p><h1>Sổ lỗi của bạn</h1><p>Mỗi câu trả lời sai được giữ lại để bạn biết chính xác mình yếu ở nghĩa, cụm, đồng nghĩa hay phát âm.</p></div>
-              {mistakes.length > 0 && <button type="button" onClick={() => { playSound("tap"); setMistakes([]); }}>Xóa toàn bộ</button>}
+              {reviewableMistakes.length > 0 && <div className="mistake-heading-actions"><button type="button" onClick={() => startMistakeReview(reviewableMistakes)}>↻ Làm lại {reviewableMistakes.length} câu sai</button><button type="button" onClick={() => { playSound("tap"); setMistakes([]); }}>Xóa toàn bộ</button></div>}
             </section>
 
             <div className="mistake-summary">
-              {(["meaning", "collocation", "synonym", "pronunciation"] as Question["kind"][]).map((item) => (
-                <article key={item}><span>{focusLabels[item]}</span><strong>{mistakes.filter((mistake) => mistake.kind === item).length}</strong><small>lỗi đã ghi</small></article>
-              ))}
+              {(["meaning", "collocation", "synonym", "pronunciation"] as Question["kind"][]).map((item) => {
+                const matchingMistakes = reviewableMistakes.filter((mistake) => mistake.kind === item);
+                return <button type="button" key={item} disabled={!matchingMistakes.length} onClick={() => startMistakeReview(matchingMistakes)}><span>{focusLabels[item]}</span><strong>{matchingMistakes.length}</strong><small>{matchingMistakes.length ? "Ôn riêng nhóm này →" : "Chưa có lỗi"}</small></button>;
+              })}
             </div>
 
             <section className="mistake-list">
@@ -807,7 +1019,7 @@ export default function LexiconApp() {
                     <div className="mistake-type"><span>{focusLabels[mistake.kind]}</span><small>{new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit" }).format(new Date(mistake.createdAt))}</small></div>
                     <div className="mistake-copy"><p>{mistake.prompt}</p><div><span>Bạn trả lời: <del>{mistake.submitted}</del></span><span>Đáp án đúng: <strong>{mistake.answer}</strong></span></div></div>
                     <div className="mistake-entry"><strong>{entry.term}</strong><small>{entry.meaningVi}</small></div>
-                    <button type="button" onClick={() => goToEntry(entry.id)}>Mở hồ sơ →</button>
+                    <div className="mistake-row-actions"><button type="button" onClick={() => startMistakeReview([mistake])}>Làm lại</button><button type="button" onClick={() => goToEntry(entry.id)}>Mở hồ sơ</button></div>
                   </article>
                 );
               })}
@@ -820,7 +1032,7 @@ export default function LexiconApp() {
       </main>
 
       <nav className="mobile-nav" aria-label="Điều hướng di động">
-        {navItems.map((item) => <button type="button" key={item.id} className={view === item.id ? "active" : ""} onClick={() => navigateTo(item.id)}><i aria-hidden="true">{item.icon}</i><span>{item.short}</span>{item.id === "mistakes" && mistakes.length > 0 && <b>{mistakes.length}</b>}</button>)}
+        {navItems.map((item) => <button type="button" key={item.id} className={view === item.id || (view === "review-mistakes" && item.id === "mistakes") ? "active" : ""} onClick={() => navigateTo(item.id)}><i aria-hidden="true">{item.icon}</i><span>{item.short}</span>{item.id === "mistakes" && mistakes.length > 0 && <b>{mistakes.length}</b>}</button>)}
       </nav>
     </div>
   );

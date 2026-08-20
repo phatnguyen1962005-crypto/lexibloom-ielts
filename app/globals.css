@@ -262,9 +262,13 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .quiz-footnote strong { font-size: 10px; white-space: nowrap; }
 .quiz-footnote p { color: var(--muted); font-size: 10px; margin: 0; }
 
-.mistakes-heading > button { background: transparent; border: 1px solid #dbb1a7; border-radius: 9px; color: #9b4938; cursor: pointer; font-size: 9px; font-weight: 750; padding: 10px 13px; }
+.mistake-heading-actions { align-items: center; display: flex; gap: 8px; }
+.mistake-heading-actions button { border: 0; border-radius: 10px; cursor: pointer; font-size: 9px; font-weight: 800; padding: 11px 13px; }
+.mistake-heading-actions button:first-child { background: var(--green); color: white; }
+.mistake-heading-actions button:last-child { background: transparent; border: 1px solid #dbb1a7; color: #9b4938; }
 .mistake-summary { display: grid; gap: 10px; grid-template-columns: repeat(4, 1fr); margin: 30px 0 14px; }
-.mistake-summary article { background: var(--white); border: 1px solid var(--line); border-radius: 13px; padding: 15px; }
+.mistake-summary button { background: var(--white); border: 1px solid var(--line); border-radius: 13px; cursor: pointer; padding: 15px; text-align: left; }
+.mistake-summary button:disabled { cursor: default; opacity: .62; }
 .mistake-summary span, .mistake-summary small { color: var(--muted); display: block; font-size: 8px; }
 .mistake-summary strong { display: block; font-family: Georgia, serif; font-size: 29px; margin: 7px 0 2px; }
 .mistake-list { display: flex; flex-direction: column; gap: 8px; }
@@ -278,7 +282,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .mistake-copy strong { color: #32623e; }
 .mistake-entry strong { display: block; font-size: 11px; }
 .mistake-entry small { color: var(--muted); display: block; font-size: 8px; margin-top: 3px; }
-.mistake-list > article > button { background: transparent; border: 0; color: var(--green-2); cursor: pointer; font-size: 9px; font-weight: 800; }
+.mistake-row-actions { align-items: stretch; display: flex; flex-direction: column; gap: 4px; }
+.mistake-row-actions button { background: transparent; border: 0; border-radius: 7px; color: var(--green-2); cursor: pointer; font-size: 8px; font-weight: 800; padding: 5px 7px; white-space: nowrap; }
+.mistake-row-actions button:first-child { background: var(--lime-soft); color: var(--green); }
 .mistake-empty { align-items: center; background: var(--white); border: 1px solid var(--line); border-radius: 16px; display: flex; flex-direction: column; min-height: 360px; justify-content: center; padding: 40px; text-align: center; }
 .mistake-empty > span { align-items: center; background: var(--lime); border-radius: 50%; display: flex; font-size: 25px; height: 58px; justify-content: center; width: 58px; }
 .mistake-empty h2 { font-family: Georgia, serif; font-size: 28px; font-weight: 500; margin: 18px 0 6px; }
@@ -346,6 +352,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   .answer-feedback { align-items: start; grid-template-columns: 36px 1fr; }
   .answer-feedback > button { grid-column: 1 / -1; }
   .quiz-footnote { align-items: start; flex-direction: column; gap: 5px; }
+  .mistake-heading-actions { align-items: stretch; flex-direction: column; width: 100%; }
+  .mistake-heading-actions button { width: 100%; }
   .mistake-summary { grid-template-columns: 1fr 1fr; }
   .mistake-list > article { align-items: start; grid-template-columns: 1fr auto; }
   .mistake-copy { grid-column: 1 / -1; grid-row: 2; }
@@ -624,6 +632,10 @@ body {
 .quiz-heading { align-items: center; }
 .quiz-heading > div:first-child { padding-left: 62px; position: relative; }
 .mode-orb { align-items: center; background: var(--purple); border-radius: 17px; box-shadow: 0 9px 21px rgba(116,87,232,.23); color: white; display: flex; font-size: 18px; height: 48px; justify-content: center; left: 0; position: absolute; top: 8px; transform: rotate(-5deg); width: 48px; }
+.review-heading .mode-orb { background: var(--coral); box-shadow: 0 9px 21px rgba(212,102,78,.22); }
+.review-card .quiz-progress i { background: linear-gradient(90deg, var(--coral), var(--lime)); }
+.review-footnote { background: rgba(255,255,255,.45); border-color: #d9b9ad; }
+.review-result .result-crown { background: var(--green); border-color: #dff2d4; color: var(--lime); }
 .quiz-heading h1, .mistakes-heading h1 { font-family: ui-rounded, "Arial Rounded MT Bold", Inter, sans-serif; font-size: clamp(32px, 4vw, 48px); font-weight: 850; }
 .session-score { align-items: center; background: white; border: 1px solid var(--line); color: var(--ink); display: grid; gap: 0 12px; grid-template-columns: auto auto; min-width: 165px; }
 .session-score span { color: var(--muted); }
@@ -692,8 +704,8 @@ body {
 .confetti i:nth-child(13) { animation-delay: -.3s; left: 95%; }
 .confetti i:nth-child(14) { animation-delay: -2.2s; left: 48%; }
 
-.mistake-summary article { transition: transform .16s, box-shadow .16s; }
-.mistake-summary article:hover { box-shadow: 0 8px 20px rgba(24,50,37,.07); transform: translateY(-2px); }
+.mistake-summary button { transition: transform .16s, box-shadow .16s; }
+.mistake-summary button:hover:not(:disabled) { box-shadow: 0 8px 20px rgba(24,50,37,.07); transform: translateY(-2px); }
 .mobile-nav button i { display: block; font-size: 12px; font-style: normal; margin-bottom: 2px; }
 
 @keyframes soundPulse { 0%, 100% { opacity: .75; transform: scale(.7); } 50% { opacity: 0; transform: scale(1.55); } }
